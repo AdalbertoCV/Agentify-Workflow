@@ -83,7 +83,7 @@ export function SessionView({
           </div>
         </div>
         <div className="right">
-          <BrowserPane session={session} />
+          <BrowserPane session={session} testUsers={cfg.testUsers} />
           <DiffPane session={session} />
         </div>
       </div>

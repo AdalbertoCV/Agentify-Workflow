@@ -32,7 +32,7 @@ writeFileSync(
 )
 writeFileSync(
   join(root, 'scripts', 'web.sh'),
-  `node -e "require('http').createServer((q,s)=>{s.setHeader('content-type','text/html');s.end('<h1 style=font-family:sans-serif>Hola desde '+process.env.AGENTIFY_SESSION+'</h1><p id=api>…</p><script>fetch(\\'http://127.0.0.1:'+process.env.AGENTIFY_PORT_API+'/\\').then(r=>r.json()).then(j=>document.getElementById(\\'api\\').textContent=\\'API en puerto \\'+j.port)</script>')}).listen(process.env.AGENTIFY_PORT,'127.0.0.1')"\n`
+  `node -e "require('http').createServer((q,s)=>{s.setHeader('content-type','text/html');s.end('<h1 style=font-family:sans-serif>Hola desde '+process.env.AGENTIFY_SESSION+'</h1><p id=api>…</p><form><input id=email type=email placeholder=email><input id=pw type=password></form><script>fetch(\\'http://127.0.0.1:'+process.env.AGENTIFY_PORT_API+'/\\').then(r=>r.json()).then(j=>document.getElementById(\\'api\\').textContent=\\'API en puerto \\'+j.port)</script>')}).listen(process.env.AGENTIFY_PORT,'127.0.0.1')"\n`
 )
 writeFileSync(
   join(root, 'agentify.config.json'),
@@ -41,6 +41,7 @@ writeFileSync(
       branchPrefix: 'e2e',
       defaultAgent: 'shell',
       browserRepo: 'web',
+      testUsers: [{ label: 'Admin', email: 'admin@local.test', password: 'demo-pass' }],
       agents: [{ id: 'shell', label: 'Shell', command: 'cmd', args: [], resumeArgs: [], waiting: 'idle' }],
       repos: [
         { name: 'api', path: 'api', trunk: 'main', run: { script: 'scripts/api.sh', port: true } },
@@ -100,6 +101,15 @@ try {
   const types = await app.evaluate(async ({ clipboard }) => (await clipboard.read()).flatMap((i) => i.types))
   if (!types.some((t) => t.includes('image'))) throw new Error(`portapapeles sin imagen: ${types}`)
   await step('05-captura-completa')
+
+  await page.getByRole('button', { name: '👤 Usuarios' }).click()
+  await page.locator('.user-row', { hasText: 'admin@local.test' }).getByRole('button', { name: 'Llenar' }).click()
+  await page.getByText('Login llenado con admin@local.test').waitFor({ timeout: 10000 })
+  const filled = await page.evaluate(() =>
+    document.querySelector('webview').executeJavaScript("[document.getElementById('email').value, document.getElementById('pw').value]")
+  )
+  if (filled[0] !== 'admin@local.test' || filled[1] !== 'demo-pass') throw new Error(`login no llenado: ${filled}`)
+  await step('05b-usuarios-login-llenado')
 
   await page.getByText('✂ Recortar').click()
   const box = await page.locator('.region').boundingBox()

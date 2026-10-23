@@ -1,7 +1,7 @@
-import type { AppConfig, RepoConfig } from '../main/core/config'
+import type { AppConfig, RepoConfig, TestUser } from '../main/core/config'
 import type { DeleteResult, Session } from '../main/core/sessions'
 
-export type { AppConfig, RepoConfig, DeleteResult, Session }
+export type { AppConfig, RepoConfig, DeleteResult, Session, TestUser }
 
 export type TestStatus = 'stopped' | 'starting' | 'running' | 'error'
 export type AgentState = 'working' | 'waiting' | 'off'

@@ -5,3 +5,6 @@ out
 .eslintcache
 *.log*
 .superpowers/
+.env
+.env.*
+!.env.example

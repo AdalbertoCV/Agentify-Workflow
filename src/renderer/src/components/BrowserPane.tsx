@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { SessionInfo } from '../../../shared/api'
+import type { SessionInfo, TestUser } from '../../../shared/api'
 import { api, errorText } from '../api'
+import { TestUsersMenu } from './TestUsersMenu'
 
 type WebviewEl = HTMLElement & {
   getWebContentsId(): number
@@ -9,11 +10,18 @@ type WebviewEl = HTMLElement & {
   reload(): void
   loadURL(url: string): Promise<void>
   getURL(): string
+  executeJavaScript(code: string): Promise<unknown>
 }
 
 type Rect = { x: number; y: number; width: number; height: number }
 
-export function BrowserPane({ session }: { session: SessionInfo }): React.JSX.Element {
+export function BrowserPane({
+  session,
+  testUsers = []
+}: {
+  session: SessionInfo
+  testUsers?: TestUser[]
+}): React.JSX.Element {
   const view = useRef<WebviewEl | null>(null)
   const [ready, setReady] = useState(false)
   const [address, setAddress] = useState(session.url ?? '')
@@ -121,6 +129,12 @@ export function BrowserPane({ session }: { session: SessionInfo }): React.JSX.El
               void view.current.loadURL(url)
             }
           }}
+        />
+        <TestUsersMenu
+          users={testUsers}
+          canFill={ready}
+          fill={(script) => view.current?.executeJavaScript(script) ?? Promise.resolve(false)}
+          notify={flash}
         />
         <button title="Arrastra para capturar un área" disabled={!ready} onClick={() => setSelecting(true)}>
           ✂ Recortar

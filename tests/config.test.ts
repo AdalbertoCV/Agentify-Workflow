@@ -26,6 +26,22 @@ describe('loadConfig', () => {
     expect(cfg.repos[0].setup).toEqual([])
   })
 
+  test('keeps test users through load and save', async () => {
+    const root = tempDir()
+    writeConfig(root, {
+      branchPrefix: 'me',
+      repos: [{ name: 'svc', path: 'svc', trunk: 'main' }],
+      agents: [agent],
+      defaultAgent: 'claude',
+      testUsers: [{ label: 'Admin', email: 'admin@local.test', password: 'pw' }]
+    })
+    const cfg = loadConfig(root)
+    expect(cfg.testUsers).toEqual([{ label: 'Admin', email: 'admin@local.test', password: 'pw' }])
+    const { saveConfig } = await import('../src/main/core/config')
+    saveConfig(cfg)
+    expect(loadConfig(root).testUsers).toHaveLength(1)
+  })
+
   test('reports every problem at once', () => {
     const root = tempDir()
     writeConfig(root, {

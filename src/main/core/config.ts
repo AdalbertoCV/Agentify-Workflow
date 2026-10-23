@@ -56,6 +56,8 @@ export type AgentConfig = {
   waiting?: 'claude-hooks' | 'idle'
 }
 
+export type TestUser = { label?: string; email: string; password: string }
+
 export type ExtraCheck = { label: string; command: string; expect?: string; fix?: string }
 
 export type AppConfig = {
@@ -68,6 +70,8 @@ export type AppConfig = {
   extraChecks?: ExtraCheck[]
   /** First message to the agent in a new session; `{ticket}` and `{title}` are filled in. */
   startPrompt?: string
+  /** Accounts the seeded databases contain, shown in the browser bar to copy or fill a login. */
+  testUsers?: TestUser[]
 }
 
 export class ConfigError extends Error {
@@ -140,7 +144,10 @@ export function parseConfig(raw: any, root: string): AppConfig {
     defaultAgent: raw.defaultAgent,
     browserRepo: raw.browserRepo,
     extraChecks: raw.extraChecks ?? [],
-    startPrompt: typeof raw.startPrompt === 'string' ? raw.startPrompt : undefined
+    startPrompt: typeof raw.startPrompt === 'string' ? raw.startPrompt : undefined,
+    testUsers: Array.isArray(raw.testUsers)
+      ? raw.testUsers.filter((u: any) => typeof u?.email === 'string' && typeof u?.password === 'string')
+      : undefined
   }
 }
 
@@ -163,6 +170,7 @@ export function saveConfig(cfg: AppConfig): void {
     agents: cfg.agents,
     extraChecks: cfg.extraChecks,
     startPrompt: cfg.startPrompt,
+    testUsers: cfg.testUsers,
     repos: cfg.repos.map((r) => ({
       ...r,
       path: r.path.startsWith(prefix) ? r.path.slice(prefix.length) : r.path
