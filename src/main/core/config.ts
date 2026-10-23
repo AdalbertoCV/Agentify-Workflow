@@ -58,6 +58,9 @@ export type AgentConfig = {
 
 export type TestUser = { label?: string; email: string; password: string }
 
+export type TicketProviderId = 'linear' | 'github' | 'manual'
+export type TicketsConfig = { provider: TicketProviderId; githubRepos?: string[] }
+
 export type ExtraCheck = { label: string; command: string; expect?: string; fix?: string }
 
 export type AppConfig = {
@@ -72,6 +75,8 @@ export type AppConfig = {
   startPrompt?: string
   /** Accounts the seeded databases contain, shown in the browser bar to copy or fill a login. */
   testUsers?: TestUser[]
+  /** Where tickets come from; chosen in Conectores. */
+  tickets?: TicketsConfig
 }
 
 export class ConfigError extends Error {
@@ -147,8 +152,20 @@ export function parseConfig(raw: any, root: string): AppConfig {
     startPrompt: typeof raw.startPrompt === 'string' ? raw.startPrompt : undefined,
     testUsers: Array.isArray(raw.testUsers)
       ? raw.testUsers.filter((u: any) => typeof u?.email === 'string' && typeof u?.password === 'string')
-      : undefined
+      : undefined,
+    tickets: parseTickets(raw.tickets)
   }
+}
+
+function parseTickets(raw: any): TicketsConfig | undefined {
+  if (!['linear', 'github', 'manual'].includes(raw?.provider)) return undefined
+  const repos = Array.isArray(raw.githubRepos) ? raw.githubRepos.filter((r: unknown) => typeof r === 'string') : []
+  return repos.length ? { provider: raw.provider, githubRepos: repos } : { provider: raw.provider }
+}
+
+/** The configured provider; configs from before the choice existed keep Linear if it is connected. */
+export function ticketProvider(cfg: AppConfig, hasLinearKey: boolean): TicketProviderId {
+  return cfg.tickets?.provider ?? (hasLinearKey ? 'linear' : 'manual')
 }
 
 export function configPath(root: string): string {
@@ -171,6 +188,7 @@ export function saveConfig(cfg: AppConfig): void {
     extraChecks: cfg.extraChecks,
     startPrompt: cfg.startPrompt,
     testUsers: cfg.testUsers,
+    tickets: cfg.tickets,
     repos: cfg.repos.map((r) => ({
       ...r,
       path: r.path.startsWith(prefix) ? r.path.slice(prefix.length) : r.path

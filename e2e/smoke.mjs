@@ -1,7 +1,7 @@
 // End-to-end smoke: drives the built app (npm run build first) against throwaway repos.
 // Usage: node e2e/smoke.mjs [screenshotDir]
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { _electron as electron } from 'playwright-core'
@@ -157,6 +157,17 @@ try {
   await page.getByRole('button', { name: 'Conectores' }).click()
   await page.locator('.item').first().waitFor({ timeout: 60000 })
   await step('10-conectores')
+  await page.locator('.seg').getByRole('button', { name: 'GitHub Issues' }).click()
+  await page.locator('.gh-repos input').fill('org/issues')
+  await page.locator('.gh-repos').getByRole('button', { name: 'Agregar' }).click()
+  await page.locator('.gh-repos .chip', { hasText: 'org/issues' }).waitFor({ timeout: 30000 })
+  await page.locator('.item', { hasText: 'GitHub Issues' }).waitFor({ timeout: 60000 })
+  await step('10b-conectores-github')
+  const saved = JSON.parse(readFileSync(join(root, 'agentify.config.json'), 'utf8')).tickets
+  if (saved?.provider !== 'github' || saved.githubRepos?.[0] !== 'org/issues') throw new Error(`tickets no guardado: ${JSON.stringify(saved)}`)
+  await page.locator('.seg').getByRole('button', { name: 'Manual' }).click()
+  await page.getByText('Escribes el ticket').waitFor()
+  await step('10c-conectores-manual')
   await page.getByRole('button', { name: 'Repos' }).click()
   await step('11-repos')
   console.log(`\nTodo bien. Capturas en ${shots}`)

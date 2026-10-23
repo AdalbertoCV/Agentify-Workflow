@@ -1,21 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AppConfig, Issue, Session } from '../../../shared/api'
+import type { AppConfig, Issue, Session, TicketProviderId } from '../../../shared/api'
 import { api, errorText } from '../api'
+
+const PROVIDER_LABEL: Record<TicketProviderId, string> = {
+  linear: 'Linear',
+  github: 'GitHub Issues',
+  manual: 'Manual'
+}
 
 export function NewSessionDialog({
   cfg,
   onClose,
   onCreated,
-  onConnectLinear
+  onConnect
 }: {
   cfg: AppConfig
   onClose: () => void
   onCreated: (s: Session) => void
-  onConnectLinear: () => void
+  onConnect: () => void
 }): React.JSX.Element {
-  const [hasKey, setHasKey] = useState<boolean | null>(null)
+  const [provider, setProvider] = useState<TicketProviderId | null>(null)
   const [issues, setIssues] = useState<Issue[]>([])
   const [issuesError, setIssuesError] = useState('')
+  const [loaded, setLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<string>('')
   const [ticket, setTicket] = useState('')
@@ -28,11 +35,12 @@ export function NewSessionDialog({
   const progressEl = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    void api.linear.hasKey().then(async (k) => {
-      setHasKey(k)
-      if (!k) return
+    void api.tickets.provider().then(async (p) => {
+      setProvider(p)
+      if (p === 'manual') return
       try {
-        setIssues(await api.linear.issues())
+        setIssues(await api.tickets.list())
+        setLoaded(true)
       } catch (e) {
         setIssuesError(errorText(e))
       }
@@ -53,7 +61,7 @@ export function NewSessionDialog({
     setPicked(i.identifier)
     setTicket(i.identifier)
     setTitle(i.title)
-    const fromTicket = await api.linear.reposFor(i.description)
+    const fromTicket = await api.tickets.reposFor(i)
     if (fromTicket.length) setRepos(fromTicket)
   }
 
@@ -78,21 +86,26 @@ export function NewSessionDialog({
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Nueva sesión</h2>
 
-        {hasKey === false && (
+        {provider && provider !== 'manual' && issuesError && (
           <div className="row">
-            <span className="muted">Conecta Linear para elegir tus tickets de una lista.</span>
-            <button className="ghost" onClick={onConnectLinear}>
-              Conectar Linear →
+            <span className="error">
+              {PROVIDER_LABEL[provider]} no respondió: {issuesError}
+            </span>
+            <button className="ghost" onClick={onConnect}>
+              Conectores →
             </button>
           </div>
         )}
-        {hasKey && (
+        {provider && provider !== 'manual' && !issuesError && (
           <div className="field">
             <label>Tus tickets</label>
             <input placeholder="Buscar por número o título" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
             <div className="issues">
-              {issuesError && <div className="error" style={{ padding: 10 }}>{issuesError}</div>}
-              {!issuesError && !issues.length && <div className="muted" style={{ padding: 10 }}>Cargando…</div>}
+              {!issues.length && (
+                <div className="muted" style={{ padding: 10 }}>
+                  {loaded ? 'No tienes tickets abiertos asignados.' : 'Cargando…'}
+                </div>
+              )}
               {filtered.map((i) => (
                 <div key={i.identifier} className={`issue ${picked === i.identifier ? 'on' : ''}`} onClick={() => pick(i)}>
                   <span className="id">{i.identifier}</span>

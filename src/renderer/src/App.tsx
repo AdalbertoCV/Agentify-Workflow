@@ -146,10 +146,10 @@ export default function App(): React.JSX.Element {
             refresh()
             setOpenId(id)
           }}
-          onConnectLinear={() => setTab('connectors')}
+          onConnect={() => setTab('connectors')}
         />
       )}
-      {tab === 'connectors' && <Connectors onChecked={setFailing} />}
+      {tab === 'connectors' && <Connectors onChecked={setFailing} onConfig={setCfg} />}
       {tab === 'repos' && <Repos cfg={cfg} onSaved={setCfg} />}
     </div>
   )

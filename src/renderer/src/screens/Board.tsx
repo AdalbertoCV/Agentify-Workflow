@@ -10,13 +10,13 @@ export function Board({
   sessions,
   refresh,
   onOpen,
-  onConnectLinear
+  onConnect
 }: {
   cfg: AppConfig
   sessions: SessionInfo[]
   refresh: () => void
   onOpen: (id: string) => void
-  onConnectLinear: () => void
+  onConnect: () => void
 }): React.JSX.Element {
   const [creating, setCreating] = useState(false)
   const [notice, setNotice] = useState('')
@@ -68,9 +68,9 @@ export function Board({
         <NewSessionDialog
           cfg={cfg}
           onClose={() => setCreating(false)}
-          onConnectLinear={() => {
+          onConnect={() => {
             setCreating(false)
-            onConnectLinear()
+            onConnect()
           }}
           onCreated={(s) => {
             setCreating(false)

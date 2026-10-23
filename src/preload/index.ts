@@ -47,10 +47,12 @@ const api: AgentifyApi = {
   openPath: (p) => invoke('open:path', p),
   openExternal: (u) => invoke('open:external', u),
 
-  linear: {
-    hasKey: () => invoke('linear:has-key'),
-    issues: () => invoke('linear:issues'),
-    reposFor: (d) => invoke('linear:repos-for', d)
+  tickets: {
+    provider: () => invoke('tickets:provider'),
+    setProvider: (p, repos) => invoke('tickets:set-provider', p, repos),
+    list: () => invoke('tickets:list'),
+    reposFor: (i) => invoke('tickets:repos-for', i),
+    githubRepos: () => invoke('tickets:github-repos')
   },
   secrets: { set: (name, value) => invoke('secrets:set', name, value) },
   connectors: () => invoke('connectors'),

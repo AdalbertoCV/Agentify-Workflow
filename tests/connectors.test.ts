@@ -9,7 +9,8 @@ const cfg = {
   agents: [{ id: 'claude', label: 'Claude Code', command: 'claude', args: [], resumeArgs: [] }],
   defaultAgent: 'claude',
   branchPrefix: 'p',
-  extraChecks: [{ label: 'Skills', command: 'claude plugin list', expect: 'team-skills', fix: 'install it' }]
+  extraChecks: [{ label: 'Skills', command: 'claude plugin list', expect: 'team-skills', fix: 'install it' }],
+  tickets: { provider: 'linear' }
 } as AppConfig
 
 test('reports failing tools with a fix and working ones with detail', async () => {
@@ -35,4 +36,32 @@ test('reports failing tools with a fix and working ones with detail', async () =
   expect(byId.linear.ok).toBe(false)
   expect(byId.linear.fix?.kind).toBe('secret')
   expect(byId['extra:0']).toMatchObject({ ok: false, fix: { kind: 'command', value: 'install it' } })
+})
+
+const quiet = {
+  run: async (): Promise<{ stdout: string; stderr: string }> => ({ stdout: 'ok', stderr: '' }),
+  shell: async () => ({ stdout: '', stderr: '' }),
+  secret: () => 'lin_key',
+  fetchFn: fetch
+}
+
+test('with GitHub Issues as provider: a GitHub Issues check and no Linear one', async () => {
+  const checks = await checkConnectors(
+    { ...cfg, extraChecks: [], tickets: { provider: 'github', githubRepos: ['org/issues'] } },
+    quiet
+  )
+  const ids = checks.map((c) => c.id)
+  expect(ids).not.toContain('linear')
+  expect(checks.find((c) => c.id === 'github-issues')).toMatchObject({ ok: true, label: 'GitHub Issues' })
+  expect(checks.find((c) => c.id === 'github-issues')?.detail).toContain('org/issues')
+})
+
+test('GitHub Issues with no repo on GitHub fails with a clear message', async () => {
+  const checks = await checkConnectors({ ...cfg, extraChecks: [], tickets: { provider: 'github' } }, quiet)
+  expect(checks.find((c) => c.id === 'github-issues')).toMatchObject({ ok: false })
+})
+
+test('manual tickets need no connector', async () => {
+  const checks = await checkConnectors({ ...cfg, extraChecks: [], tickets: { provider: 'manual' } }, quiet)
+  expect(checks.map((c) => c.id).filter((id) => id === 'linear' || id === 'github-issues')).toEqual([])
 })

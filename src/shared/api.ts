@@ -1,7 +1,7 @@
-import type { AppConfig, RepoConfig, TestUser } from '../main/core/config'
+import type { AppConfig, RepoConfig, TestUser, TicketProviderId } from '../main/core/config'
 import type { DeletePlan, DeleteStep, Session } from '../main/core/sessions'
 
-export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser }
+export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser, TicketProviderId }
 
 export type DeleteProgress = {
   id: string
@@ -27,6 +27,8 @@ export type Issue = {
   state: string
   description: string
   url: string
+  /** Config repo the ticket lives in (GitHub Issues). */
+  repo?: string
 }
 
 export type Check = {
@@ -88,10 +90,12 @@ export interface AgentifyApi {
   openPath(path: string): Promise<void>
   openExternal(url: string): Promise<void>
 
-  linear: {
-    hasKey(): Promise<boolean>
-    issues(): Promise<Issue[]>
-    reposFor(description: string): Promise<string[]>
+  tickets: {
+    provider(): Promise<TicketProviderId>
+    setProvider(provider: TicketProviderId, githubRepos?: string[]): Promise<AppConfig>
+    list(): Promise<Issue[]>
+    reposFor(issue: Issue): Promise<string[]>
+    githubRepos(): Promise<{ slug: string; repo?: string }[]>
   }
   secrets: { set(name: string, value: string): Promise<void> }
   connectors(): Promise<Check[]>

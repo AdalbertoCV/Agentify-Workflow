@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AppConfig } from './config'
-import { linearViewer } from './linear'
+import { providerFor } from './tickets'
 
 export type Check = {
   id: string
@@ -50,7 +50,7 @@ async function tool(
 }
 
 export async function checkConnectors(cfg: AppConfig, deps: ConnectorDeps): Promise<Check[]> {
-  const checks: Promise<Check>[] = [
+  const checks: Promise<Check | null>[] = [
     tool('git', 'Git', async () => firstLine((await deps.run('git', ['--version'])).stdout), {
       kind: 'link',
       value: 'https://git-scm.com/download/win'
@@ -114,16 +114,11 @@ export async function checkConnectors(cfg: AppConfig, deps: ConnectorDeps): Prom
   }
 
   checks.push(
-    (async (): Promise<Check> => {
-      const key = deps.secret('linear')
-      const fix = { kind: 'secret' as const, value: 'linear' }
-      if (!key) return { id: 'linear', label: 'Linear', ok: false, detail: 'Sin llave de API', fix }
-      try {
-        return { id: 'linear', label: 'Linear', ok: true, detail: `Conectado como ${await linearViewer(key, deps.fetchFn)}` }
-      } catch (e) {
-        return { id: 'linear', label: 'Linear', ok: false, detail: errText(e), fix }
-      }
-    })()
+    providerFor(cfg, {
+      secret: deps.secret,
+      fetchFn: deps.fetchFn,
+      gh: async (args) => (await deps.run('gh', args)).stdout
+    }).check()
   )
 
   ;(cfg.extraChecks ?? []).forEach((x, i) => {
@@ -141,5 +136,5 @@ export async function checkConnectors(cfg: AppConfig, deps: ConnectorDeps): Prom
     )
   })
 
-  return Promise.all(checks)
+  return (await Promise.all(checks)).filter((c): c is Check => c !== null)
 }

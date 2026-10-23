@@ -4,6 +4,8 @@ export type Issue = {
   state: string
   description: string
   url: string
+  /** Config repo the ticket lives in (GitHub Issues). */
+  repo?: string
 }
 
 const ENDPOINT = 'https://api.linear.app/graphql'

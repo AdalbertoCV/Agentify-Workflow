@@ -802,3 +802,45 @@ button.primary.danger-bg {
   background: var(--bad);
   border-color: var(--bad);
 }
+.provider-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.provider-box .name {
+  font-weight: 600;
+  margin-right: 8px;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.seg button.on {
+  background: var(--accent);
+  color: #111;
+}
+.gh-repos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.gh-repos input {
+  width: 220px;
+}
+.chip-x {
+  padding: 0 0 0 6px;
+  border: none;
+  font-size: 11px;
+}

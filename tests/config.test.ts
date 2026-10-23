@@ -72,3 +72,31 @@ describe('detectRepos', () => {
     expect(repos.find((r) => r.name === 'notes')).toBeUndefined()
   })
 })
+
+describe('ticket provider', () => {
+  const base = { branchPrefix: 'me', repos: [{ name: 'svc', path: 'svc', trunk: 'main' }], agents: [agent], defaultAgent: 'claude' }
+
+  test('keeps the chosen provider and extra GitHub repos through load and save', async () => {
+    const root = tempDir()
+    writeConfig(root, { ...base, tickets: { provider: 'github', githubRepos: ['org/issues'] } })
+    const { saveConfig } = await import('../src/main/core/config')
+    saveConfig(loadConfig(root))
+    expect(loadConfig(root).tickets).toEqual({ provider: 'github', githubRepos: ['org/issues'] })
+  })
+
+  test('drops an unknown provider', () => {
+    const root = tempDir()
+    writeConfig(root, { ...base, tickets: { provider: 'jira' } })
+    expect(loadConfig(root).tickets).toBeUndefined()
+  })
+
+  test('without a choice: Linear when its key exists, otherwise manual', async () => {
+    const { ticketProvider } = await import('../src/main/core/config')
+    const root = tempDir()
+    writeConfig(root, base)
+    const cfg = loadConfig(root)
+    expect(ticketProvider(cfg, true)).toBe('linear')
+    expect(ticketProvider(cfg, false)).toBe('manual')
+    expect(ticketProvider({ ...cfg, tickets: { provider: 'github' } }, true)).toBe('github')
+  })
+})

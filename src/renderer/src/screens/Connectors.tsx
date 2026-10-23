@@ -1,9 +1,24 @@
 import { useEffect, useState } from 'react'
-import type { Check } from '../../../shared/api'
+import type { AppConfig, Check, TicketProviderId } from '../../../shared/api'
 import { api, errorText } from '../api'
 import { AgentTerminal } from '../components/AgentTerminal'
 
-export function Connectors({ onChecked }: { onChecked: (failing: number) => void }): React.JSX.Element {
+const PROVIDERS: { id: TicketProviderId; label: string }[] = [
+  { id: 'linear', label: 'Linear' },
+  { id: 'github', label: 'GitHub Issues' },
+  { id: 'manual', label: 'Manual' }
+]
+
+export function Connectors({
+  onChecked,
+  onConfig
+}: {
+  onChecked: (failing: number) => void
+  onConfig: (c: AppConfig) => void
+}): React.JSX.Element {
+  const [provider, setProvider] = useState<TicketProviderId | null>(null)
+  const [ghRepos, setGhRepos] = useState<{ slug: string; repo?: string }[]>([])
+  const [extra, setExtra] = useState('')
   const [checks, setChecks] = useState<Check[] | null>(null)
   const [error, setError] = useState('')
   const [secretFor, setSecretFor] = useState<string | null>(null)
@@ -14,6 +29,9 @@ export function Connectors({ onChecked }: { onChecked: (failing: number) => void
     setChecks(null)
     setError('')
     try {
+      const p = await api.tickets.provider()
+      setProvider(p)
+      if (p === 'github') setGhRepos(await api.tickets.githubRepos())
       const c = await api.connectors()
       setChecks(c)
       onChecked(c.filter((x) => !x.ok).length)
@@ -26,6 +44,21 @@ export function Connectors({ onChecked }: { onChecked: (failing: number) => void
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const extras = ghRepos.filter((r) => !r.repo).map((r) => r.slug)
+  const choose = async (p: TicketProviderId, repos?: string[]): Promise<void> => {
+    onConfig(await api.tickets.setProvider(p, repos))
+    void load()
+  }
+  const addExtra = (): void => {
+    const slug = extra
+      .trim()
+      .replace(/^https:\/\/github\.com\//, '')
+      .replace(/\.git$/, '')
+    if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) return setError('Escribe el repo como dueño/repo, por ejemplo org/issues')
+    setExtra('')
+    void choose('github', [...extras, slug])
+  }
 
   const fix = async (c: Check): Promise<void> => {
     if (!c.fix) return
@@ -45,6 +78,54 @@ export function Connectors({ onChecked }: { onChecked: (failing: number) => void
         <span className="muted">Lo que la app necesita para que todo funcione.</span>
         <span className="spacer" />
         <button onClick={load}>Volver a revisar</button>
+      </div>
+      <div className="provider-box">
+        <div className="row">
+          <span className="name">Tickets desde</span>
+          <div className="seg">
+            {PROVIDERS.map((x) => (
+              <button key={x.id} className={provider === x.id ? 'on' : ''} onClick={() => choose(x.id)}>
+                {x.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {provider === 'github' && (
+          <div className="gh-repos">
+            <span className="muted">Issues abiertos asignados a ti en:</span>
+            {ghRepos.map((r) => (
+              <span key={r.slug} className="chip">
+                {r.slug}
+                {!r.repo && (
+                  <button
+                    className="ghost chip-x"
+                    title="Quitar"
+                    onClick={() =>
+                      choose(
+                        'github',
+                        extras.filter((x) => x !== r.slug)
+                      )
+                    }
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
+            ))}
+            <input
+              placeholder="otro repo: dueño/repo"
+              value={extra}
+              onChange={(e) => setExtra(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addExtra()}
+            />
+            <button onClick={addExtra} disabled={!extra.trim()}>
+              Agregar
+            </button>
+          </div>
+        )}
+        {provider === 'manual' && (
+          <div className="muted">Escribes el ticket, el título y eliges los repos al crear cada sesión.</div>
+        )}
       </div>
       {error && <div className="error">{error}</div>}
       {!checks && !error && <div className="muted">Revisando…</div>}

@@ -2,18 +2,29 @@ import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, shell, w
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { agentState, installClaudeHooks } from './core/agentState'
-import { configPath, loadConfig, writeStarterConfig, type AgentConfig, type AppConfig, type RepoConfig } from './core/config'
+import {
+  configPath,
+  loadConfig,
+  saveConfig,
+  writeStarterConfig,
+  type AgentConfig,
+  type AppConfig,
+  type RepoConfig,
+  type TicketProviderId
+} from './core/config'
 import { checkConnectors } from './core/connectors'
 import { commitAndPush } from './core/commit'
 import { sessionDiff } from './core/diff'
 import { ensureGolden, goldenCopiedAt, prepareSpare } from './core/golden'
 import { adoptLooseWorktrees } from './core/importer'
-import { listMyIssues, parseReposLine } from './core/linear'
+import { githubRepos } from './core/github'
+import type { Issue } from './core/linear'
 import { onboardPrompt, readOnboardResult, saveRepo, startOnboarding } from './core/onboard'
 import { gitBash, runResolved, runShell } from './core/proc'
 import { Runner } from './core/runner'
 import { createSession, planDelete, runDelete, sessionDir } from './core/sessions'
 import { readSessions, updateSession, type Session } from './core/store'
+import { providerFor } from './core/tickets'
 import { PtyManager } from './pty'
 import { getSecret, setSecret } from './secrets'
 import type { SessionInfo, DeleteProgress } from '../shared/api'
@@ -264,15 +275,23 @@ export function registerIpc(): void {
   ipcMain.handle('open:path', (_e, p: string) => shell.openPath(p))
   ipcMain.handle('open:external', (_e, u: string) => shell.openExternal(u))
 
-  ipcMain.handle('linear:has-key', () => Boolean(getSecret('linear')))
-  ipcMain.handle('linear:issues', () => {
-    const key = getSecret('linear')
-    if (!key) throw new Error('Conecta Linear en la pestaña Conectores')
-    return listMyIssues(key)
+  const tickets = (): ReturnType<typeof providerFor> =>
+    providerFor(requireCfg(), {
+      secret: getSecret,
+      fetchFn: fetch,
+      gh: async (args) => (await runResolved('gh', args, { cwd: requireCfg().root })).stdout
+    })
+  ipcMain.handle('tickets:provider', () => tickets().id)
+  ipcMain.handle('tickets:set-provider', (_e, provider: TicketProviderId, extra?: string[]) => {
+    const c = requireCfg()
+    const repos = extra ?? c.tickets?.githubRepos
+    cfg = { ...c, tickets: repos?.length ? { provider, githubRepos: repos } : { provider } }
+    saveConfig(cfg)
+    return cfg
   })
-  ipcMain.handle('linear:repos-for', (_e, description: string) =>
-    parseReposLine(description, requireCfg().repos.map((r) => r.name))
-  )
+  ipcMain.handle('tickets:list', () => tickets().list())
+  ipcMain.handle('tickets:repos-for', (_e, issue: Issue) => tickets().reposFor(issue))
+  ipcMain.handle('tickets:github-repos', () => githubRepos(requireCfg()))
   ipcMain.handle('secrets:set', (_e, name: string, value: string) => setSecret(name, value))
 
   ipcMain.handle('connectors', () =>
