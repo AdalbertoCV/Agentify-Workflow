@@ -37,14 +37,15 @@ migrations break for every other branch, and deleting a worktree that silently f
 | **Probar** | One button boots the whole stack: repos in the ticket run from its branch, the rest from a fresh trunk copy, each through a small `run.sh`. |
 | **Browser** | An embedded browser on the session's app, with region and full-page screenshots copied straight to the clipboard. |
 | **Diff** | What is not committed yet, per repo, collapsible, unified or side by side — plus **Commit and push** (never to protected branches). |
-| **Delete** | One click removes servers, worktrees, branches and the session database. It only asks when work would be lost or another program is using the session. |
+| **Rebase** | **Actualizar con main** rebases every repo onto its trunk. Conflicts show up side by side in the app: pick main, your branch or both per block, or hand the files to the agent, then continue. A rewritten branch is pushed with `--force-with-lease`. |
+| **Delete** | Asks first, then shows each step — servers and agent stopped, worktrees, branches, databases — with its time until the session is gone. Anything that appears after you confirmed pauses it; a failed delete can be retried. |
 
 ## Highlights
 
 - **Fast.** Measured on a real Django + React project: creating a session ~8 s, its database ~1 s, the full stack up in ~10 s.
 - **Generated start scripts.** Add a repo from the **Repos** tab and the agent reads it and writes its `run.sh` / `stop.sh` / config; you review and save.
-- **Connectors tab.** Git, GitHub CLI, Docker, PostgreSQL, each agent CLI and Linear, with a one-click fix for whatever is missing.
-- **Linear.** Pick a ticket from your list; the repos it names are preselected.
+- **Connectors tab.** Git, GitHub CLI, Docker, PostgreSQL, each agent CLI and your ticket source, with a one-click fix for whatever is missing.
+- **Tickets from Linear, GitHub Issues or by hand.** Choose the source in Connectors. Pick a ticket from your list and the repos it names (a `**Repos:**` line) are preselected; GitHub issues preselect the repo they live in.
 - **Mock data for every model.** `examples/django-vite/repos/api/seed_all_models.py` fills a few rows of every Django model of your project, with signals muted so nothing reaches queues or mail.
 - **Safe by default.** Links are removed before folders, protected branches are never pushed, the source database is never written.
 
