@@ -14,7 +14,7 @@ function FirstRun({ onReady }: { onReady: (c: AppConfig) => void }): React.JSX.E
   return (
     <div className="placeholder" style={{ gap: 16 }}>
       <div className="brand" style={{ fontSize: 22 }}>
-        <img src={logo} alt="" className="brand-logo" /> Agentify
+        <img src={logo} alt="" className="brand-logo" /> Agentify-Workflow
       </div>
       <div style={{ fontSize: 16, color: 'var(--text)' }}>Elige la carpeta donde viven tus repos</div>
       <div className="muted">Detecto los repos que hay ahí y preparo todo. Puedes cambiarla después.</div>
@@ -104,7 +104,7 @@ export default function App(): React.JSX.Element {
     <div className="app">
       <div className="topbar">
         <div className="brand">
-          <img src={logo} alt="" className="brand-logo" /> Agentify
+          <img src={logo} alt="" className="brand-logo" /> Agentify-Workflow
         </div>
         <div className="tabs">
           <button className={`tab ${tab === 'sessions' ? 'active' : ''}`} onClick={() => setTab('sessions')}>

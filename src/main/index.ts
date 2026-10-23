@@ -14,7 +14,7 @@ function createWindow(): void {
     minWidth: 1000,
     minHeight: 650,
     show: false,
-    title: 'Agentify',
+    title: 'Agentify-Workflow',
     backgroundColor: '#0e1014',
     autoHideMenuBar: true,
     icon,
