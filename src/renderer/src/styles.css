@@ -938,3 +938,11 @@ button.primary.danger-bg {
 .conflicts-note {
   padding: 6px 12px;
 }
+.ticket-context {
+  min-height: 140px;
+  resize: vertical;
+}
+.gh-repos .ticket-prompt {
+  flex: 1;
+  min-width: 260px;
+}

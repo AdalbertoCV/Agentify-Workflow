@@ -10,15 +10,18 @@ const PROVIDERS: { id: TicketProviderId; label: string }[] = [
 ]
 
 export function Connectors({
+  cfg,
   onChecked,
   onConfig
 }: {
+  cfg: AppConfig
   onChecked: (failing: number) => void
   onConfig: (c: AppConfig) => void
 }): React.JSX.Element {
   const [provider, setProvider] = useState<TicketProviderId | null>(null)
   const [ghRepos, setGhRepos] = useState<{ slug: string; repo?: string }[]>([])
   const [extra, setExtra] = useState('')
+  const [prompt, setPrompt] = useState(cfg.ticketPrompt ?? '')
   const [checks, setChecks] = useState<Check[] | null>(null)
   const [error, setError] = useState('')
   const [secretFor, setSecretFor] = useState<string | null>(null)
@@ -55,7 +58,8 @@ export function Connectors({
       .trim()
       .replace(/^https:\/\/github\.com\//, '')
       .replace(/\.git$/, '')
-    if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) return setError('Escribe el repo como dueño/repo, por ejemplo org/issues')
+    if (!/^[\w.-]+\/[\w.-]+$/.test(slug))
+      return setError('Escribe el repo como dueño/repo, por ejemplo org/issues')
     setExtra('')
     void choose('github', [...extras, slug])
   }
@@ -84,7 +88,11 @@ export function Connectors({
           <span className="name">Tickets desde</span>
           <div className="seg">
             {PROVIDERS.map((x) => (
-              <button key={x.id} className={provider === x.id ? 'on' : ''} onClick={() => choose(x.id)}>
+              <button
+                key={x.id}
+                className={provider === x.id ? 'on' : ''}
+                onClick={() => choose(x.id)}
+              >
                 {x.label}
               </button>
             ))}
@@ -123,8 +131,24 @@ export function Connectors({
             </button>
           </div>
         )}
+        {(provider === 'linear' || provider === 'github') && (
+          <div className="gh-repos">
+            <span className="muted">Prompt para crear tickets (opcional):</span>
+            <input
+              className="ticket-prompt"
+              placeholder="por ejemplo /mi-equipo:ticket {context}"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+            <button onClick={async () => onConfig(await api.tickets.setPrompt(prompt))}>
+              Guardar
+            </button>
+          </div>
+        )}
         {provider === 'manual' && (
-          <div className="muted">Escribes el ticket, el título y eliges los repos al crear cada sesión.</div>
+          <div className="muted">
+            Escribes el ticket, el título y eliges los repos al crear cada sesión.
+          </div>
         )}
       </div>
       {error && <div className="error">{error}</div>}
@@ -140,12 +164,20 @@ export function Connectors({
             {!c.ok && c.fix && (
               <>
                 {c.fix.kind === 'command' && (
-                  <button className="ghost" title={c.fix.value} onClick={() => navigator.clipboard.writeText(c.fix!.value)}>
+                  <button
+                    className="ghost"
+                    title={c.fix.value}
+                    onClick={() => navigator.clipboard.writeText(c.fix!.value)}
+                  >
                     Copiar comando
                   </button>
                 )}
                 <button className="primary" onClick={() => fix(c)}>
-                  {c.fix.kind === 'link' ? 'Descargar' : c.fix.kind === 'secret' ? 'Conectar' : 'Arreglar aquí'}
+                  {c.fix.kind === 'link'
+                    ? 'Descargar'
+                    : c.fix.kind === 'secret'
+                      ? 'Conectar'
+                      : 'Arreglar aquí'}
                 </button>
               </>
             )}
@@ -158,13 +190,23 @@ export function Connectors({
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Conectar Linear</h2>
             <div className="muted">
-              Crea una llave personal en Linear → Settings → Account → Security &amp; access → Personal API keys, y pégala
-              aquí. Se guarda cifrada en esta máquina.
+              Crea una llave personal en Linear → Settings → Account → Security &amp; access →
+              Personal API keys, y pégala aquí. Se guarda cifrada en esta máquina.
             </div>
-            <button className="ghost" style={{ alignSelf: 'flex-start' }} onClick={() => api.openExternal('https://linear.app/settings/account/security')}>
+            <button
+              className="ghost"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => api.openExternal('https://linear.app/settings/account/security')}
+            >
               Abrir Linear →
             </button>
-            <input type="password" autoFocus placeholder="lin_api_…" value={secret} onChange={(e) => setSecret(e.target.value)} />
+            <input
+              type="password"
+              autoFocus
+              placeholder="lin_api_…"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+            />
             <div className="row end">
               <button onClick={() => setSecretFor(null)}>Cancelar</button>
               <button

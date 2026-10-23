@@ -77,6 +77,8 @@ export type AppConfig = {
   testUsers?: TestUser[]
   /** Where tickets come from; chosen in Conectores. */
   tickets?: TicketsConfig
+  /** Prompt for the agent that creates a ticket; `{context}` is filled in. Default: one per provider. */
+  ticketPrompt?: string
 }
 
 export class ConfigError extends Error {
@@ -153,7 +155,8 @@ export function parseConfig(raw: any, root: string): AppConfig {
     testUsers: Array.isArray(raw.testUsers)
       ? raw.testUsers.filter((u: any) => typeof u?.email === 'string' && typeof u?.password === 'string')
       : undefined,
-    tickets: parseTickets(raw.tickets)
+    tickets: parseTickets(raw.tickets),
+    ticketPrompt: typeof raw.ticketPrompt === 'string' && raw.ticketPrompt.trim() ? raw.ticketPrompt : undefined
   }
 }
 
@@ -189,6 +192,7 @@ export function saveConfig(cfg: AppConfig): void {
     startPrompt: cfg.startPrompt,
     testUsers: cfg.testUsers,
     tickets: cfg.tickets,
+    ticketPrompt: cfg.ticketPrompt,
     repos: cfg.repos.map((r) => ({
       ...r,
       path: r.path.startsWith(prefix) ? r.path.slice(prefix.length) : r.path

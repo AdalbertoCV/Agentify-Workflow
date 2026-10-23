@@ -46,6 +46,8 @@ migrations break for every other branch, and deleting a worktree that silently f
 - **Generated start scripts.** Add a repo from the **Repos** tab and the agent reads it and writes its `run.sh` / `stop.sh` / config; you review and save.
 - **Connectors tab.** Git, GitHub CLI, Docker, PostgreSQL, each agent CLI and your ticket source, with a one-click fix for whatever is missing.
 - **Tickets from Linear, GitHub Issues or by hand.** Choose the source in Connectors. Pick a ticket from your list and the repos it names (a `**Repos:**` line) are preselected; GitHub issues preselect the repo they live in.
+- **Write tickets with the agent.** **+ Nuevo ticket** takes a few lines of context and has your agent create the ticket in Linear or GitHub Issues. Set `ticketPrompt` (e.g. `/my-team:ticket {context}`) to use your team's own ticket skill.
+- **Knows when it is stale.** The top bar shows the version and commit the app started from, and warns when a newer commit is on disk and the app needs a restart.
 - **Mock data for every model.** `examples/django-vite/repos/api/seed_all_models.py` fills a few rows of every Django model of your project, with signals muted so nothing reaches queues or mail.
 - **Safe by default.** Links are removed before folders, protected branches are never pushed, the source database is never written.
 

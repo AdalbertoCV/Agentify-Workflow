@@ -28,6 +28,7 @@ const api: AgentifyApi = {
   pty: {
     open: (id) => invoke('pty:open', id),
     history: (id) => invoke('pty:history', id),
+    close: (id) => invoke('pty:close', id),
     write: (id, data) => ipcRenderer.send('pty:write', id, data),
     resize: (id, cols, rows) => ipcRenderer.send('pty:resize', id, cols, rows),
     onData: (cb) => listen('pty:data', cb),
@@ -62,8 +63,11 @@ const api: AgentifyApi = {
     setProvider: (p, repos) => invoke('tickets:set-provider', p, repos),
     list: () => invoke('tickets:list'),
     reposFor: (i) => invoke('tickets:repos-for', i),
-    githubRepos: () => invoke('tickets:github-repos')
+    githubRepos: () => invoke('tickets:github-repos'),
+    createStart: (context, repo) => invoke('tickets:create-start', context, repo),
+    setPrompt: (prompt) => invoke('tickets:set-prompt', prompt)
   },
+  build: () => invoke('app:build'),
   secrets: { set: (name, value) => invoke('secrets:set', name, value) },
   connectors: () => invoke('connectors'),
   runFix: (command) => invoke('connectors:run-fix', command),

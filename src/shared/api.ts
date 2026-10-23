@@ -84,6 +84,7 @@ export interface AgentifyApi {
   pty: {
     open(id: string): Promise<void>
     history(id: string): Promise<string>
+    close(id: string): Promise<void>
     write(id: string, data: string): void
     resize(id: string, cols: number, rows: number): void
     onData(cb: (id: string, data: string) => void): () => void
@@ -120,7 +121,12 @@ export interface AgentifyApi {
     list(): Promise<Issue[]>
     reposFor(issue: Issue): Promise<string[]>
     githubRepos(): Promise<{ slug: string; repo?: string }[]>
+    /** Opens the default agent with the prompt to create a ticket; returns its terminal id. */
+    createStart(context: string, githubRepo?: string): Promise<string>
+    setPrompt(prompt: string): Promise<AppConfig>
   }
+  /** Version and commit the app started from; `newer` is a newer commit already on disk. */
+  build(): Promise<{ version: string; commit?: string; newer: string | null }>
   secrets: { set(name: string, value: string): Promise<void> }
   connectors(): Promise<Check[]>
   runFix(command: string): Promise<string>

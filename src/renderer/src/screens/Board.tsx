@@ -4,6 +4,7 @@ import { api, errorText, useInterval } from '../api'
 import { useDelete } from '../components/ConfirmDelete'
 import { SessionCard } from '../components/SessionCard'
 import { NewSessionDialog } from './NewSessionDialog'
+import { NewTicketDialog } from './NewTicketDialog'
 
 export function Board({
   cfg,
@@ -19,6 +20,7 @@ export function Board({
   onConnect: () => void
 }): React.JSX.Element {
   const [creating, setCreating] = useState(false)
+  const [ticketing, setTicketing] = useState(false)
   const [notice, setNotice] = useState('')
   const adopted = useRef(false)
   const del = useDelete(refresh)
@@ -29,7 +31,10 @@ export function Board({
     void api
       .adoptLoose()
       .then((n) => {
-        if (n) setNotice(`Encontré ${n} worktree${n > 1 ? 's' : ''} suelto${n > 1 ? 's' : ''} y los agregué como sesiones importadas.`)
+        if (n)
+          setNotice(
+            `Encontré ${n} worktree${n > 1 ? 's' : ''} suelto${n > 1 ? 's' : ''} y los agregué como sesiones importadas.`
+          )
         refresh()
       })
       .catch((e) => setNotice(errorText(e)))
@@ -43,6 +48,7 @@ export function Board({
         <h1>Sesiones</h1>
         <span className="muted">{sessions.length}</span>
         <span className="spacer" />
+        <button onClick={() => setTicketing(true)}>+ Nuevo ticket</button>
         <button className="primary" onClick={() => setCreating(true)}>
           + Nueva sesión
         </button>
@@ -60,7 +66,12 @@ export function Board({
       ) : (
         <div className="grid">
           {sessions.map((s) => (
-            <SessionCard key={s.id} s={s} onOpen={() => onOpen(s.id)} onDelete={() => del.remove(s.id)} />
+            <SessionCard
+              key={s.id}
+              s={s}
+              onOpen={() => onOpen(s.id)}
+              onDelete={() => del.remove(s.id)}
+            />
           ))}
         </div>
       )}
@@ -76,6 +87,15 @@ export function Board({
             setCreating(false)
             refresh()
             onOpen(s.id)
+          }}
+        />
+      )}
+      {ticketing && (
+        <NewTicketDialog
+          onClose={() => setTicketing(false)}
+          onConnect={() => {
+            setTicketing(false)
+            onConnect()
           }}
         />
       )}

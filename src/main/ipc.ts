@@ -34,7 +34,8 @@ import {
 } from './core/rebase'
 import { createSession, planDelete, repoConfig as repoConfigOf, runDelete, sessionDir } from './core/sessions'
 import { readSessions, updateSession, type Session } from './core/store'
-import { providerFor } from './core/tickets'
+import { providerFor, ticketPrompt } from './core/tickets'
+import { buildInfo, newerOnDisk, type BuildInfo } from './core/buildInfo'
 import { PtyManager } from './pty'
 import { getSecret, setSecret } from './secrets'
 import type { SessionInfo, DeleteProgress } from '../shared/api'
@@ -244,6 +245,11 @@ export function registerIpc(): void {
     await openAgent(id)
   })
   ipcMain.handle('pty:history', (_e, id: string) => ptys.history(id))
+  // One-off terminals (a ticket's agent) end with their dialog, and everything they started with them.
+  ipcMain.handle('pty:close', async (_e, id: string) => {
+    terminals.delete(id)
+    await ptys.forget(id)
+  })
   ipcMain.on('pty:write', (_e, id: string, data: string) => ptys.write(id, data))
   ipcMain.on('pty:resize', (_e, id: string, cols: number, rows: number) => ptys.resize(id, cols, rows))
 
@@ -377,6 +383,27 @@ export function registerIpc(): void {
       firstArgs: ['-lc', `${command}; echo; read -n1 -p "Listo. Presiona una tecla para cerrar."`]
     })
     return id
+  })
+
+  // The agent that writes a ticket runs in a terminal of its own, in the project root.
+  ipcMain.handle('tickets:create-start', (_e, context: string, githubRepo?: string) => {
+    const c = requireCfg()
+    const prompt = ticketPrompt(c, tickets().id, { context, githubRepo })
+    const agent = agentOf(c, c.defaultAgent)
+    const id = `ticket:${Date.now()}`
+    terminals.set(id, { cwd: c.root, agent, firstArgs: [...agent.args, prompt] })
+    return id
+  })
+  ipcMain.handle('tickets:set-prompt', (_e, prompt: string) => {
+    cfg = { ...requireCfg(), ticketPrompt: prompt.trim() || undefined }
+    saveConfig(cfg)
+    return cfg
+  })
+
+  const started = buildInfo(app.getAppPath()).catch(() => ({ version: app.getVersion() }) as BuildInfo)
+  ipcMain.handle('app:build', async () => {
+    const info = await started
+    return { ...info, newer: await newerOnDisk(app.getAppPath(), info).catch(() => null) }
   })
 
   ipcMain.handle('repos:onboard-start', async (_e, src: { cloneUrl?: string; path?: string }) => {
