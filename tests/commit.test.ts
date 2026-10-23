@@ -5,7 +5,7 @@ import { commitAndPush } from '../src/main/core/commit'
 import type { AppConfig } from '../src/main/core/config'
 import { addWorktree } from '../src/main/core/git'
 import type { Session } from '../src/main/core/store'
-import { git, makeOriginAndClone, tempDir } from './helpers/git'
+import { git, makeOriginAndClone, pushBranch, tempDir } from './helpers/git'
 
 function setup(branch = 'p/t-1-x'): { cfg: AppConfig; s: Session; wt: string; origin: string } {
   const root = tempDir()
@@ -52,4 +52,29 @@ test('refuses to push a protected branch', async () => {
   const [r] = await commitAndPush(cfg, s, 'msg')
   expect(r.error).toMatch(/develop/)
   expect(r.pushed).toBe(false)
+})
+
+test('after a rebase rewrote a pushed branch, the push uses a lease and says so', async () => {
+  const { cfg, s, wt, origin } = setup()
+  await addWorktree(cfg.repos[0].path, wt, 'p/t-1-x', 'main')
+  writeFileSync(join(wt, 'feature.txt'), 'x\n')
+  await commitAndPush(cfg, s, 'T-1 first')
+  pushBranch(cfg.root, origin, 'main')
+  git(wt, 'fetch', '-q', 'origin')
+  git(wt, 'rebase', '-q', 'origin/main')
+  const [r] = await commitAndPush(cfg, s, '')
+  expect(r).toMatchObject({ pushed: true, forced: true })
+  expect(r.error).toBeUndefined()
+  expect(git(origin, 'rev-parse', 'p/t-1-x')).toBe(git(wt, 'rev-parse', 'HEAD'))
+})
+
+test('a normal push is not forced', async () => {
+  const { cfg, s, wt } = setup()
+  await addWorktree(cfg.repos[0].path, wt, 'p/t-1-x', 'main')
+  writeFileSync(join(wt, 'feature.txt'), 'x\n')
+  await commitAndPush(cfg, s, 'T-1 first')
+  writeFileSync(join(wt, 'feature.txt'), 'y\n')
+  const [r] = await commitAndPush(cfg, s, 'T-1 second')
+  expect(r).toMatchObject({ pushed: true })
+  expect(r.forced).toBeUndefined()
 })

@@ -8,6 +8,8 @@ export type CommitResult = {
   committed: boolean
   pushed: boolean
   sha?: string
+  /** The branch was rewritten (rebase) and went up with --force-with-lease. */
+  forced?: boolean
   error?: string
 }
 
@@ -41,8 +43,20 @@ export async function commitAndPush(cfg: AppConfig, s: Session, message: string)
       }
       const ahead = await git(r.worktree, 'rev-list', '--count', 'HEAD', '--not', '--remotes=origin')
       if (Number(ahead) > 0) {
-        await git(r.worktree, 'push', '-u', 'origin', branch)
+        const remote = await git(r.worktree, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`).catch(
+          () => ''
+        )
+        const rewritten =
+          remote &&
+          !(await git(r.worktree, 'merge-base', '--is-ancestor', remote, 'HEAD').then(
+            () => true,
+            () => false
+          ))
+        // A lease only overwrites the commit we last saw on origin, never someone else's push.
+        const lease = rewritten ? [`--force-with-lease=${branch}:${remote}`] : []
+        await git(r.worktree, 'push', '-u', ...lease, 'origin', branch)
         res.pushed = true
+        if (rewritten) res.forced = true
       }
       res.sha = await git(r.worktree, 'rev-parse', '--short', 'HEAD')
     } catch (e) {

@@ -41,7 +41,14 @@ export type Check = {
 
 export type RepoDiff = { repo: string; patch: string; files: number; unpushed: number }
 
-export type CommitResult = { repo: string; committed: boolean; pushed: boolean; sha?: string; error?: string }
+export type CommitResult = {
+  repo: string
+  committed: boolean
+  pushed: boolean
+  sha?: string
+  forced?: boolean
+  error?: string
+}
 
 export type OnboardStart = { repoName: string; repoPath: string; workDir: string; terminalId: string }
 
