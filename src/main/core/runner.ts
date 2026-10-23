@@ -268,6 +268,13 @@ export class Runner {
     for (const port of Object.values(r.ports)) for (const pid of await listenersOn(port)) await killTree(pid)
   }
 
+  /** Processes listening on this session's ports: the session's own servers, even detached ones. */
+  async ownedPids(id: string): Promise<number[]> {
+    const pids: number[] = []
+    for (const port of Object.values(this.ports(id))) pids.push(...(await listenersOn(port)))
+    return pids
+  }
+
   async stop(id: string): Promise<void> {
     const r = this.runs.get(id)
     if (!r) return

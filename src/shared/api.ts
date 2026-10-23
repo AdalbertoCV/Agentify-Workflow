@@ -1,12 +1,25 @@
 import type { AppConfig, RepoConfig, TestUser } from '../main/core/config'
-import type { DeleteResult, Session } from '../main/core/sessions'
+import type { DeletePlan, DeleteStep, Session } from '../main/core/sessions'
 
-export type { AppConfig, RepoConfig, DeleteResult, Session, TestUser }
+export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser }
+
+export type DeleteProgress = {
+  id: string
+  phase: 'confirm' | 'running' | 'paused' | 'failed' | 'deleted'
+  plan: DeletePlan
+  steps: DeleteStep[]
+  error?: string
+}
 
 export type TestStatus = 'stopped' | 'starting' | 'running' | 'error'
 export type AgentState = 'working' | 'waiting' | 'off'
 
-export type SessionInfo = Session & { test: TestStatus; agentState: AgentState; url?: string }
+export type SessionInfo = Session & {
+  test: TestStatus
+  agentState: AgentState
+  url?: string
+  deleting?: 'running' | 'failed'
+}
 
 export type Issue = {
   identifier: string
@@ -42,7 +55,12 @@ export interface AgentifyApi {
     repos: string[]
     agent?: string
   }): Promise<Session>
-  deleteSession(id: string, force: boolean): Promise<DeleteResult>
+  deletion: {
+    plan(id: string): Promise<DeleteProgress>
+    start(id: string): Promise<void>
+    state(id: string): Promise<DeleteProgress | null>
+    onProgress(cb: (p: DeleteProgress) => void): () => void
+  }
   adoptLoose(): Promise<number>
   setAgent(id: string, agent: string): Promise<void>
   onProgress(cb: (msg: string) => void): () => void

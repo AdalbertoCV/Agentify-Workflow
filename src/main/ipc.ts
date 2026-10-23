@@ -12,11 +12,11 @@ import { listMyIssues, parseReposLine } from './core/linear'
 import { onboardPrompt, readOnboardResult, saveRepo, startOnboarding } from './core/onboard'
 import { gitBash, runResolved, runShell } from './core/proc'
 import { Runner } from './core/runner'
-import { createSession, deleteSession, sessionDir } from './core/sessions'
+import { createSession, planDelete, runDelete, sessionDir } from './core/sessions'
 import { readSessions, updateSession, type Session } from './core/store'
 import { PtyManager } from './pty'
 import { getSecret, setSecret } from './secrets'
-import type { SessionInfo } from '../shared/api'
+import type { SessionInfo, DeleteProgress } from '../shared/api'
 
 type TerminalSpec = { cwd: string; agent: AgentConfig; firstArgs?: string[]; env?: Record<string, string> }
 
@@ -132,8 +132,10 @@ export function registerIpc(): void {
     return readSessions(c.root).map((s) => {
       const agent = agentOf(c, s.agent)
       const open = ptys.isOpen(s.id)
+      const deleting = deletions.get(s.id)?.phase
       return {
         ...s,
+        deleting: deleting === 'running' ? 'running' : deleting === 'failed' ? 'failed' : undefined,
         test: runner.status(s.id),
         url: runner.url(s.id),
         agentState: open
@@ -150,18 +152,48 @@ export function registerIpc(): void {
     return s
   })
 
-  ipcMain.handle('sessions:delete', async (_e, id: string, force: boolean) => {
+  // Deletes run in main and outlive the dialog: closing it never loses track of one.
+  const deletions = new Map<string, DeleteProgress>()
+  const publish = (p: DeleteProgress): void => {
+    deletions.set(p.id, p)
+    broadcast('sessions:delete-progress', p)
+  }
+
+  ipcMain.handle('sessions:delete-plan', async (_e, id: string): Promise<DeleteProgress> => {
+    const current = deletions.get(id)
+    if (current && current.phase !== 'confirm') return current
+    const plan = await planDelete(requireCfg(), id, { ignorePids: await runner.ownedPids(id) })
+    const p: DeleteProgress = { id, phase: 'confirm', plan, steps: plan.steps }
+    deletions.set(id, p)
+    return p
+  })
+
+  ipcMain.handle('sessions:delete-start', (_e, id: string) => {
+    const current = deletions.get(id)
+    if (!current || current.phase === 'running' || current.phase === 'deleted') return
     const c = requireCfg()
-    const r = await deleteSession(c, id, {
-      force,
+    publish({ ...current, phase: 'running', error: undefined })
+    void runDelete(c, id, {
+      confirmed: current.plan,
+      ignorePids: () => runner.ownedPids(id),
       beforeRemove: async (s) => {
         await ptys.forget(s.id)
         await runner.stop(s.id)
-      }
+      },
+      onStep: (steps) => publish({ ...deletions.get(id)!, steps })
     })
-    broadcast('sessions:changed')
-    return r
+      .then((r) => {
+        const now = deletions.get(id)!
+        if (r.status === 'needs-confirm')
+          return publish({ ...now, phase: 'paused', plan: { ...now.plan, risks: r.risks, processes: r.processes } })
+        publish({ ...now, phase: 'deleted' })
+        setTimeout(() => deletions.get(id)?.phase === 'deleted' && deletions.delete(id), 5000)
+      })
+      .catch((e) => publish({ ...deletions.get(id)!, phase: 'failed', error: (e as Error).message }))
+      .finally(() => broadcast('sessions:changed'))
   })
+
+  ipcMain.handle('sessions:delete-state', (_e, id: string) => deletions.get(id) ?? null)
 
   ipcMain.handle('sessions:adopt', async () => {
     const n = await adoptLooseWorktrees(requireCfg())

@@ -762,3 +762,43 @@ pre.preview {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.card.deleting {
+  opacity: 0.75;
+}
+.del-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow: auto;
+}
+.del-step {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+}
+.del-step.running,
+.del-step.done {
+  color: var(--text);
+}
+.del-step.done .del-icon {
+  color: var(--ok);
+}
+.del-step.failed {
+  color: var(--bad);
+}
+.del-error {
+  grid-column: 2 / -1;
+  white-space: pre-wrap;
+}
+.ok-text {
+  color: var(--ok);
+  font-weight: 600;
+}
+button.primary.danger-bg {
+  background: var(--bad);
+  border-color: var(--bad);
+}

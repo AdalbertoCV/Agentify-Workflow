@@ -14,7 +14,12 @@ const api: AgentifyApi = {
   chooseRoot: () => invoke('config:choose-root'),
   listSessions: () => invoke('sessions:list'),
   createSession: (input) => invoke('sessions:create', input),
-  deleteSession: (id, force) => invoke('sessions:delete', id, force),
+  deletion: {
+    plan: (id) => invoke('sessions:delete-plan', id),
+    start: (id) => invoke('sessions:delete-start', id),
+    state: (id) => invoke('sessions:delete-state', id),
+    onProgress: (cb) => listen('sessions:delete-progress', cb)
+  },
   adoptLoose: () => invoke('sessions:adopt'),
   setAgent: (id, agent) => invoke('sessions:set-agent', id, agent),
   onProgress: (cb) => listen('sessions:progress', cb),

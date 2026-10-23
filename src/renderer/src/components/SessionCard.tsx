@@ -53,6 +53,24 @@ export function SessionCard({
   onDelete: () => void
 }): React.JSX.Element {
   const running = s.test === 'running' || s.test === 'starting'
+  if (s.deleting)
+    return (
+      <div className="card deleting" onClick={onDelete} title={s.deleting === 'failed' ? 'Abre para ver el error y reintentar' : 'Abre para ver el progreso'}>
+        <div className="card-top">
+          <span className="ticket">{s.ticket}</span>
+        </div>
+        <div className="title">{s.title || '—'}</div>
+        {s.deleting === 'running' ? (
+          <span className="status">
+            <span className="dot bad pulse" /> Borrando…
+          </span>
+        ) : (
+          <span className="status" style={{ color: 'var(--bad)' }}>
+            <span className="dot bad" /> Borrado incompleto
+          </span>
+        )}
+      </div>
+    )
   return (
     <div className={`card ${s.agentState === 'waiting' ? 'waiting' : ''}`} onClick={onOpen}>
       <div className="card-top">
