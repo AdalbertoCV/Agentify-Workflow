@@ -107,3 +107,52 @@ test('a stale session db that does not migrate is recreated from the golden', as
   const migrated = readFileSync(join(root, 'migrated.txt'), 'utf8').trim().split(/\r?\n/)
   expect(migrated).toEqual([golden, 'agentify_t_7', 'agentify_t_7'])
 })
+
+test('Probar migrates the session db of a repo in the session, so new migrations of the branch apply', async () => {
+  const root = tempDir()
+  const { clone } = makeOriginAndClone(root, 'main', 'api')
+  writeFileSync(join(clone, '.env'), 'DB_NAME=mylocal\nDB_USER=u\nDB_PASSWORD=p\nDB_HOST=localhost\nDB_PORT=5432\n')
+  mkdirSync(join(root, 'scripts'))
+  writeFileSync(join(root, 'scripts', 'serve.sh'), `${SERVE}\n`)
+  const cfg: AppConfig = {
+    root,
+    branchPrefix: 'p',
+    repos: [
+      {
+        name: 'api',
+        path: clone,
+        trunk: 'main',
+        copyFiles: ['.env'],
+        linkDirs: [],
+        setup: ['echo "$DB_NAME" >> "$AGENTIFY_ROOT/migrated.txt"'],
+        db: {
+          envFile: '.env',
+          nameKey: 'DB_NAME',
+          userKey: 'DB_USER',
+          passwordKey: 'DB_PASSWORD',
+          hostKey: 'DB_HOST',
+          portKey: 'DB_PORT',
+          source: 'empty'
+        },
+        run: { script: 'scripts/serve.sh', port: true }
+      }
+    ],
+    agents: [{ id: 'claude', label: 'Claude', command: 'claude', args: [], resumeArgs: [] }],
+    defaultAgent: 'claude'
+  }
+  const session = {
+    id: 't-8',
+    ticket: 'T-8',
+    title: 'x',
+    agent: 'claude',
+    createdAt: '',
+    imported: false,
+    repos: [{ name: 'api', worktree: clone, branch: 'main', createdBranch: false, db: 'agentify_t_8' }]
+  }
+  writeSessions(root, [session])
+  existing.add('agentify_t_8')
+  const runner = new Runner()
+  await runner.start(cfg, session, () => {})
+  await runner.stop('t-8')
+  expect(readFileSync(join(root, 'migrated.txt'), 'utf8').trim().split(/\r?\n/)).toEqual(['agentify_t_8'])
+})

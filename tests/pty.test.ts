@@ -24,7 +24,7 @@ test('a resume that ends right away falls back to a new conversation', async () 
   await new Promise((r) => setTimeout(r, 2500))
   expect(m.history('s2')).toContain('nueva')
   expect(m.isOpen('s2')).toBe(true)
-  m.kill('s2')
+  await m.kill('s2')
 })
 
 test('the start prompt goes only to the first open of a session', async () => {
@@ -87,4 +87,24 @@ test('first open runs args, later opens resume, history is kept', async () => {
   await m.open('s1', cwd, agent)
   await exited
   expect(m.history('s1')).toContain('otra')
+})
+
+test('killing an agent also stops the servers it started, freeing their ports', async () => {
+  const { isPortFree, portAnswers } = await import('../src/main/core/ports')
+  const port = 20977
+  // Like a dev server an agent runs in the background: its own process, detached from the terminal.
+  const server = `require('http').createServer((q,s)=>s.end('ok')).listen(${port},'127.0.0.1')`
+  const agent = {
+    id: 'node',
+    label: 'node',
+    command: 'node',
+    args: ['-e', `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(server)}],{detached:true,stdio:'ignore'});setInterval(()=>{},1000)`],
+    resumeArgs: []
+  }
+  const m = new PtyManager()
+  await m.open('s5', tempDir(), agent, {}, agent.args)
+  for (let i = 0; i < 50 && !(await portAnswers(port)); i++) await new Promise((r) => setTimeout(r, 100))
+  expect(await portAnswers(port)).toBe(true)
+  await m.kill('s5')
+  expect(await isPortFree(port)).toBe(true)
 })

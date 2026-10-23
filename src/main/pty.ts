@@ -2,7 +2,7 @@ import { spawn as ptySpawn, type IPty } from '@lydell/node-pty'
 import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AgentConfig } from './core/config'
-import { resolveCommand } from './core/proc'
+import { killTree, resolveCommand } from './core/proc'
 
 const HISTORY_LIMIT = 400_000
 export const STARTED_MARKER = '.agentify-started'
@@ -112,10 +112,12 @@ export class PtyManager {
     if (cols > 0 && rows > 0) this.entries.get(id)?.pty.resize(cols, rows)
   }
 
-  kill(id: string): void {
+  /** Ends the agent and everything it started (dev servers it ran in the background hold ports and files). */
+  async kill(id: string): Promise<void> {
     const e = this.entries.get(id)
     if (!e) return
     this.entries.delete(id)
+    await killTree(e.pty.pid)
     try {
       e.pty.kill()
     } catch {
@@ -123,13 +125,13 @@ export class PtyManager {
     }
   }
 
-  forget(id: string): void {
-    this.kill(id)
+  async forget(id: string): Promise<void> {
     this.histories.delete(id)
+    await this.kill(id)
   }
 
-  killAll(): void {
-    for (const id of [...this.entries.keys()]) this.kill(id)
+  async killAll(): Promise<void> {
+    await Promise.all([...this.entries.keys()].map((id) => this.kill(id)))
   }
 
   onData(cb: (id: string, data: string) => void): void {

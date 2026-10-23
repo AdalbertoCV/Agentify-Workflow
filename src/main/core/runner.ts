@@ -129,6 +129,8 @@ export class Runner {
         if (ports[repo.name]) env.AGENTIFY_PORT = String(ports[repo.name])
         if (repo.db) {
           const dbName = own?.db ?? (await this.ensureSessionDb(cfg, session, repo, cwd, log))
+          // The branch may have gained migrations since the session db was made.
+          if (own?.db) await this.migrate(cfg, repo, cwd, dbName, log)
           env.AGENTIFY_DB_NAME = dbName
           env[repo.db.nameKey] = dbName
         }
@@ -206,12 +208,7 @@ export class Runner {
     const { conn } = dbSource(repo)
     // The trunk checkout was refreshed just before; the golden follows it without touching it again.
     await ensureGolden(cfg, repo, (m) => log(repo.name, m), { refreshTrunk: false })
-    const migrate = async (): Promise<void> => {
-      for (const line of repo.setup) {
-        log(repo.name, line)
-        await runShell(line, { cwd, env: { [repo.db!.nameKey]: name, AGENTIFY_DB_NAME: name, AGENTIFY_ROOT: cfg.root } })
-      }
-    }
+    const migrate = (): Promise<void> => this.migrate(cfg, repo, cwd, name, log)
     // Fresh clone of the golden (already at trunk); a branch checkout may still add its own migrations.
     const fresh = async (): Promise<void> => {
       log(repo.name, `clonando la base madre → ${name}…`)
@@ -235,6 +232,19 @@ export class Runner {
       await fresh()
     }
     return name
+  }
+
+  private async migrate(
+    cfg: AppConfig,
+    repo: RepoConfig,
+    cwd: string,
+    name: string,
+    log: (repo: string, line: string) => void
+  ): Promise<void> {
+    for (const line of repo.setup) {
+      log(repo.name, line)
+      await runShell(line, { cwd, env: { [repo.db!.nameKey]: name, AGENTIFY_DB_NAME: name, AGENTIFY_ROOT: cfg.root } })
+    }
   }
 
   private async killProcs(r: Run): Promise<void> {

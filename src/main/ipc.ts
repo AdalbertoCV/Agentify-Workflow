@@ -155,7 +155,7 @@ export function registerIpc(): void {
     const r = await deleteSession(c, id, {
       force,
       beforeRemove: async (s) => {
-        ptys.forget(s.id)
+        await ptys.forget(s.id)
         await runner.stop(s.id)
       }
     })
@@ -169,9 +169,9 @@ export function registerIpc(): void {
     return n
   })
 
-  ipcMain.handle('sessions:set-agent', (_e, id: string, agent: string) => {
+  ipcMain.handle('sessions:set-agent', async (_e, id: string, agent: string) => {
     updateSession(requireCfg().root, id, { agent })
-    ptys.forget(id)
+    await ptys.forget(id)
     broadcast('sessions:changed')
   })
 
@@ -309,7 +309,6 @@ export function registerIpc(): void {
     if (quitting) return
     quitting = true
     e.preventDefault()
-    ptys.killAll()
-    void runner.stopAll().finally(() => app.exit(0))
+    void Promise.all([ptys.killAll(), runner.stopAll()]).finally(() => app.exit(0))
   })
 }

@@ -52,6 +52,8 @@ export function onboardPrompt(
     '   - Never talk to production queues, buckets or URLs: use local or disabled equivalents.',
     '   - If it needs Docker, use `docker compose -p "agentify-$AGENTIFY_SESSION-' + repoName + '"` and',
     '     remap host ports to $AGENTIFY_PORT so sessions do not collide.',
+    '   - Keep the dev server\'s auto-reload on (e.g. no `runserver --noreload`): the agent edits code',
+    '     while it runs, and the running service must pick up those changes.',
     '   - Install nothing globally; assume dependencies were set up by the "setup" commands.',
     '2. stop.sh — only if run.sh starts something that outlives it (e.g. docker compose down).',
     '3. repo.json — exactly this shape:',
