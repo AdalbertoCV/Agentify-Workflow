@@ -1,0 +1,65 @@
+{
+  "branchPrefix": "me",
+  "defaultAgent": "claude",
+  "browserRepo": "web",
+  "startPrompt": "Read the ticket {ticket} ({title}) and propose a plan before changing code.",
+  "agents": [
+    {
+      "id": "claude",
+      "label": "Claude Code",
+      "command": "claude",
+      "args": [],
+      "resumeArgs": ["--continue"],
+      "waiting": "claude-hooks"
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "command": "codex",
+      "args": [],
+      "resumeArgs": ["resume", "--last"],
+      "waiting": "idle"
+    }
+  ],
+  "repos": [
+    {
+      "name": "api",
+      "path": "api",
+      "trunk": "main",
+      "copyFiles": [".env"],
+      "linkDirs": [".venv"],
+      "db": {
+        "envFile": ".env",
+        "nameKey": "DB_NAME",
+        "userKey": "DB_USER",
+        "passwordKey": "DB_PASSWORD",
+        "hostKey": "DB_HOST",
+        "portKey": "DB_PORT",
+        "source": "empty",
+        "seed": [
+          "uv run --no-sync python manage.py shell -c \"exec(open('$AGENTIFY_ROOT/.agentify/repos/api/seed_all_models.py', encoding='utf-8').read())\""
+        ],
+        "migrationPaths": [":(glob)**/migrations/*.py"]
+      },
+      "setup": ["uv run --no-sync python manage.py migrate --noinput"],
+      "warm": ["uv run --no-sync python -m compileall -q -j 0 ."],
+      "run": { "script": ".agentify/repos/api/run.sh", "port": true }
+    },
+    {
+      "name": "web",
+      "path": "web",
+      "trunk": "main",
+      "copyFiles": [".env.local"],
+      "linkDirs": ["node_modules"],
+      "linkFrom": "trunk",
+      "install": { "command": "npm ci --no-audit --no-fund", "watch": ["package-lock.json"] },
+      "setup": [],
+      "run": {
+        "script": ".agentify/repos/web/run.sh",
+        "port": true,
+        "needs": ["api"],
+        "url": "http://localhost:{port}/"
+      }
+    }
+  ]
+}

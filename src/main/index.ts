@@ -1,0 +1,74 @@
+import { app, shell, BrowserWindow } from 'electron'
+import { join } from 'path'
+import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import icon from '../../resources/icon.png?asset'
+import { registerIpc } from './ipc'
+
+// Separate profile for automated runs, so they never touch the real settings or secrets.
+if (process.env.AGENTIFY_USER_DATA) app.setPath('userData', process.env.AGENTIFY_USER_DATA)
+
+function createWindow(): void {
+  const mainWindow = new BrowserWindow({
+    width: 1500,
+    height: 950,
+    minWidth: 1000,
+    minHeight: 650,
+    show: false,
+    title: 'Agentify',
+    backgroundColor: '#0e1014',
+    autoHideMenuBar: true,
+    icon,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      webviewTag: true
+    }
+  })
+
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.maximize()
+    mainWindow.show()
+  })
+
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  } else {
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+}
+
+app.whenReady().then(() => {
+  electronApp.setAppUserModelId('dev.adalbertocv.agentify')
+
+  app.on('browser-window-created', (_, window) => {
+    optimizer.watchWindowShortcuts(window)
+  })
+
+  // Links inside a session's browser pane open in that same pane, not in a new window.
+  app.on('web-contents-created', (_e, contents) => {
+    if (contents.getType() === 'webview') {
+      contents.setWindowOpenHandler(({ url }) => {
+        contents.loadURL(url)
+        return { action: 'deny' }
+      })
+    }
+  })
+
+  registerIpc()
+  createWindow()
+
+  app.on('activate', function () {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})

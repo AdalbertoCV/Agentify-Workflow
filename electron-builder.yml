@@ -1,0 +1,36 @@
+appId: dev.adalbertocv.agentify
+productName: Agentify
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!{tests,e2e,examples,assets,docs}/**'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,vitest.config.ts}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - resources/**
+  - node_modules/@lydell/**
+win:
+  executableName: agentify
+  icon: build/icon.ico
+nsis:
+  artifactName: Agentify-Setup-${version}.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+dmg:
+  artifactName: Agentify-${version}.${ext}
+linux:
+  target:
+    - AppImage
+  maintainer: AdalbertoCV
+  category: Development
+appImage:
+  artifactName: Agentify-${version}.${ext}
+npmRebuild: false
