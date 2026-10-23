@@ -98,6 +98,16 @@ try {
   await page.waitForTimeout(2500)
   await step('04-probar-navegador')
 
+  await page.locator('button[title^="Ver el navegador a pantalla completa"]').click()
+  const big = await page.locator('.pane.browser-full').boundingBox()
+  const win = page.viewportSize() ?? (await page.evaluate(() => ({ width: innerWidth, height: innerHeight })))
+  if (!big || big.width < win.width - 2 || big.height < win.height - 2) throw new Error(`no ocupa la ventana: ${JSON.stringify(big)}`)
+  const still = await page.evaluate(() => document.querySelector('webview').executeJavaScript('document.body.innerText'))
+  if (!still.includes('Hola desde')) throw new Error('la página se recargó o se perdió al ampliar')
+  await step('04b-navegador-pantalla-completa')
+  await page.keyboard.press('Escape')
+  await page.locator('.pane.browser-full').waitFor({ state: 'detached', timeout: 5000 })
+
   await page.getByText('⛶ Completa').click()
   await page.getByText('Copiado al portapapeles').waitFor({ timeout: 10000 })
   const types = await app.evaluate(async ({ clipboard }) => (await clipboard.read()).flatMap((i) => i.types))

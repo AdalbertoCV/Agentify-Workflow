@@ -30,6 +30,17 @@ export function BrowserPane({
   const [selecting, setSelecting] = useState(false)
   const [box, setBox] = useState<Rect | null>(null)
   const [toast, setToast] = useState('')
+  // Fills the app window with CSS only: the webview stays mounted, so the page is not reloaded.
+  const [full, setFull] = useState(false)
+
+  useEffect(() => {
+    if (!full) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !selecting) setFull(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [full, selecting])
   const start = useRef<{ x: number; y: number } | null>(null)
   const logsEl = useRef<HTMLDivElement>(null)
 
@@ -108,7 +119,7 @@ export function BrowserPane({
   }
 
   return (
-    <div className="pane">
+    <div className={`pane${full ? ' browser-full' : ''}`}>
       <div className="pane-bar">
         <button className="ghost" title="Atrás" disabled={!ready} onClick={() => view.current?.goBack()}>
           ←
@@ -141,6 +152,13 @@ export function BrowserPane({
         </button>
         <button title="Captura la página completa" disabled={!ready} onClick={captureFull}>
           ⛶ Completa
+        </button>
+        <button
+          className="ghost"
+          title={full ? 'Volver a la sesión (Esc)' : 'Ver el navegador a pantalla completa (Esc para salir)'}
+          onClick={() => setFull(!full)}
+        >
+          {full ? '⤡' : '⤢'}
         </button>
       </div>
       <div className="pane-body">

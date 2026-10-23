@@ -946,3 +946,10 @@ button.primary.danger-bg {
   flex: 1;
   min-width: 260px;
 }
+.pane.browser-full {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg);
+  border: none;
+}
