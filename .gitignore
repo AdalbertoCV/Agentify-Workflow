@@ -8,3 +8,5 @@ out
 .env
 .env.*
 !.env.example
+.vscode/
+docs/superpowers/
