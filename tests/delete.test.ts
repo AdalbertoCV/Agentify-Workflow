@@ -6,16 +6,18 @@ import { readSessions } from '../src/main/core/store'
 import { git, makeOriginAndClone, tempDir } from './helpers/git'
 
 const dropped: string[] = []
+let failDrop = false
 vi.mock('../src/main/core/db', () => ({
   copyDatabase: vi.fn(async () => {}),
   cloneDatabase: vi.fn(async () => {}),
   databaseExists: vi.fn(async () => false),
   dropDatabase: vi.fn(async (_c: unknown, name: string) => {
+    if (failDrop) throw new Error('db en uso')
     dropped.push(name)
   })
 }))
 
-const { createSession, deleteSession, sessionDir } = await import('../src/main/core/sessions')
+const { createSession, deleteSession, planDelete, runDelete, sessionDir } = await import('../src/main/core/sessions')
 
 function setup(): AppConfig {
   const root = tempDir()
@@ -56,6 +58,7 @@ function setup(): AppConfig {
 
 beforeEach(() => {
   dropped.length = 0
+  failDrop = false
 })
 
 describe('deleteSession', () => {
@@ -142,5 +145,66 @@ describe('deleteSession', () => {
       risks: [{ repo: 'web', dirty: false, unpushed: 1 }],
       processes: []
     })
+  })
+})
+
+describe('planDelete / runDelete', () => {
+  test('runs the steps in order and reports each one done with its duration', async () => {
+    const cfg = setup()
+    await createSession(cfg, { ticket: 'T-5', title: 'x', repos: ['api', 'web'] }, () => {})
+    const plan = await planDelete(cfg, 't-5')
+    expect(plan.steps.map((s) => s.id)).toEqual([
+      'stop',
+      'procs',
+      'wt:api',
+      'branch:api',
+      'db:agentify_t_5',
+      'wt:web',
+      'branch:web',
+      'dir'
+    ])
+    let last: { id: string; state: string; ms?: number }[] = []
+    const r = await runDelete(cfg, 't-5', {
+      confirmed: plan,
+      onStep: (steps) => (last = steps)
+    })
+    expect(r).toEqual({ status: 'deleted' })
+    expect(last.every((s) => s.state === 'done' && typeof s.ms === 'number')).toBe(true)
+    expect(existsSync(sessionDir(cfg, 't-5'))).toBe(false)
+  })
+
+  test('work that appears after the confirmation pauses the delete and keeps the worktree', async () => {
+    const cfg = setup()
+    const s = await createSession(cfg, { ticket: 'T-6', title: 'x', repos: ['api'] }, () => {})
+    const plan = await planDelete(cfg, 't-6')
+    writeFileSync(join(s.repos[0].worktree, 'late.txt'), 'new work')
+    const stopped = vi.fn(async () => {})
+    const r = await runDelete(cfg, 't-6', { confirmed: plan, beforeRemove: stopped, onStep: () => {} })
+    expect(r.status).toBe('needs-confirm')
+    expect(stopped).not.toHaveBeenCalled()
+    expect(existsSync(s.repos[0].worktree)).toBe(true)
+  })
+
+  test('a retry after a worktree folder was already removed still finishes', async () => {
+    const cfg = setup()
+    const s = await createSession(cfg, { ticket: 'T-7', title: 'x', repos: ['api', 'web'] }, () => {})
+    rmSync(s.repos[1].worktree, { recursive: true, force: true })
+    const plan = await planDelete(cfg, 't-7')
+    const r = await runDelete(cfg, 't-7', { confirmed: plan, onStep: () => {} })
+    expect(r).toEqual({ status: 'deleted' })
+    expect(readSessions(cfg.root)).toEqual([])
+  })
+
+  test('a failing step is marked failed with its error and the session stays', async () => {
+    const cfg = setup()
+    await createSession(cfg, { ticket: 'T-8', title: 'x', repos: ['api'] }, () => {})
+    const plan = await planDelete(cfg, 't-8')
+    failDrop = true
+    let last: { id: string; state: string; error?: string }[] = []
+    await expect(
+      runDelete(cfg, 't-8', { confirmed: plan, onStep: (steps) => (last = steps) })
+    ).rejects.toThrow('db en uso')
+    expect(last.find((s) => s.id === 'db:agentify_t_8')).toMatchObject({ state: 'failed', error: 'db en uso' })
+    expect(readSessions(cfg.root).map((x) => x.id)).toEqual(['t-8'])
   })
 })

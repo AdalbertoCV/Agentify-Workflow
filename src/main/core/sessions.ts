@@ -77,14 +77,40 @@ export type DeleteResult =
   | { status: 'deleted' }
   | { status: 'needs-confirm'; risks: RepoRisk[]; processes: RunningProcess[] }
 
-export async function deleteSession(
-  cfg: AppConfig,
-  id: string,
-  opts: { force: boolean; beforeRemove?: (s: Session) => Promise<void> }
-): Promise<DeleteResult> {
+export type DeleteStep = {
+  id: string
+  label: string
+  state: 'pending' | 'running' | 'done' | 'failed'
+  ms?: number
+  error?: string
+}
+export type DeletePlan = { risks: RepoRisk[]; processes: RunningProcess[]; steps: DeleteStep[] }
+type NeedsConfirm = Extract<DeleteResult, { status: 'needs-confirm' }>
+
+function findSession(cfg: AppConfig, id: string): Session {
   const session = readSessions(cfg.root).find((s) => s.id === id)
   if (!session) throw new Error(`No existe la sesión ${id}`)
+  return session
+}
 
+function deleteSteps(session: Session): DeleteStep[] {
+  const steps: DeleteStep[] = [
+    { id: 'stop', label: 'Detener agente y servidores', state: 'pending' },
+    { id: 'procs', label: 'Buscar programas que usan la sesión', state: 'pending' }
+  ]
+  for (const r of session.repos) {
+    steps.push({ id: `wt:${r.name}`, label: `${r.name}: quitar worktree`, state: 'pending' })
+    if (r.createdBranch)
+      steps.push({ id: `branch:${r.name}`, label: `${r.name}: borrar rama ${r.branch}`, state: 'pending' })
+    if (r.db) steps.push({ id: `db:${r.db}`, label: `borrar base ${r.db}`, state: 'pending' })
+  }
+  for (const extra of session.extraDbs ?? [])
+    steps.push({ id: `db:${extra.db}`, label: `borrar base ${extra.db}`, state: 'pending' })
+  steps.push({ id: 'dir', label: 'Borrar carpeta de la sesión', state: 'pending' })
+  return steps
+}
+
+async function sessionRisks(cfg: AppConfig, session: Session): Promise<RepoRisk[]> {
   const risks: RepoRisk[] = []
   for (const r of session.repos) {
     if (!existsSync(join(r.worktree, '.git'))) continue
@@ -93,44 +119,128 @@ export async function deleteSession(
     const risk = await worktreeRisk(r.worktree, placed)
     if (risk.dirty || risk.unpushed > 0) risks.push({ repo: r.name, ...risk })
   }
-  await opts.beforeRemove?.(session)
-  // Programs the app did not start (a dev server from another terminal…) lock files: ask first.
-  const processes = await processesUsing(session.repos.map((r) => r.worktree))
-  if ((risks.length || processes.length) && !opts.force) return { status: 'needs-confirm', risks, processes }
+  return risks
+}
+
+async function foreignProcesses(session: Session, ignorePids: number[]): Promise<RunningProcess[]> {
+  const found = await processesUsing(session.repos.map((r) => r.worktree))
+  return found.filter((p) => !ignorePids.includes(p.pid))
+}
+
+/** What deleting would remove and what would be lost; touches nothing. */
+export async function planDelete(cfg: AppConfig, id: string, opts: { ignorePids?: number[] } = {}): Promise<DeletePlan> {
+  const session = findSession(cfg, id)
+  return {
+    risks: await sessionRisks(cfg, session),
+    processes: await foreignProcesses(session, opts.ignorePids ?? []),
+    steps: deleteSteps(session)
+  }
+}
+
+/**
+ * Deletes step by step, reporting each one. Anything the user did not confirm (new work, a new
+ * foreign program) pauses it before it is touched. Steps on things already gone count as done,
+ * so a failed delete can simply run again.
+ */
+export async function runDelete(
+  cfg: AppConfig,
+  id: string,
+  opts: {
+    confirmed: { risks: RepoRisk[]; processes: RunningProcess[] }
+    ignorePids?: () => Promise<number[]>
+    beforeRemove?: (s: Session) => Promise<void>
+    onStep: (steps: DeleteStep[]) => void
+  }
+): Promise<DeleteResult> {
+  const session = findSession(cfg, id)
+  const steps = deleteSteps(session)
+  const emit = (): void => opts.onStep(steps.map((x) => ({ ...x })))
+  const step = async (stepId: string, work: () => Promise<void> | void): Promise<void> => {
+    const s = steps.find((x) => x.id === stepId)!
+    s.state = 'running'
+    emit()
+    const t = Date.now()
+    try {
+      await work()
+    } catch (e) {
+      s.state = 'failed'
+      s.error = (e as Error).message
+      s.ms = Date.now() - t
+      emit()
+      throw e
+    }
+    s.state = 'done'
+    s.ms = Date.now() - t
+    emit()
+  }
+
+  const risks = await sessionRisks(cfg, session)
+  const unseen = risks.some((r) => {
+    const seen = opts.confirmed.risks.find((c) => c.repo === r.repo)
+    return (r.dirty && !seen?.dirty) || r.unpushed > (seen?.unpushed ?? 0)
+  })
+  if (unseen) return { status: 'needs-confirm', risks, processes: opts.confirmed.processes } satisfies NeedsConfirm
+
+  await step('stop', () => opts.beforeRemove?.(session))
+  let processes: RunningProcess[] = []
+  await step('procs', async () => {
+    processes = await foreignProcesses(session, (await opts.ignorePids?.()) ?? [])
+  })
+  if (processes.some((p) => !opts.confirmed.processes.some((c) => c.pid === p.pid)))
+    return { status: 'needs-confirm', risks, processes }
   for (const p of processes) await killTree(p.pid)
+
   const sources = new Set(
     cfg.repos.filter((r) => r.db && existsSync(join(r.path, r.db.envFile))).map((r) => dbSource(r).source)
   )
+  const drop = async (repo: RepoConfig | undefined, db: string): Promise<void> => {
+    if (!repo?.db) return
+    if (!db.startsWith('agentify_') || sources.has(db))
+      throw new Error(`Me negué a borrar la base ${db}: no es una base de sesión`)
+    await dropDatabase(dbSource(repo).conn, db)
+  }
   for (const r of session.repos) {
     const repo = cfg.repos.find((x) => x.name === r.name)
     const repoPath = repo?.path ?? (await mainCheckoutOf(r.worktree))
-    if (repoPath) {
-      await removeWorktree(repoPath, r.worktree)
-      if (r.createdBranch) await deleteLocalBranch(repoPath, r.branch)
-    }
-    if (r.db && repo?.db) {
-      if (!r.db.startsWith('agentify_') || sources.has(r.db))
-        throw new Error(`Me negué a borrar la base ${r.db}: no es una base de sesión`)
-      await dropDatabase(dbSource(repo).conn, r.db)
-    }
+    await step(`wt:${r.name}`, async () => {
+      if (repoPath) await removeWorktree(repoPath, r.worktree)
+    })
+    if (r.createdBranch)
+      await step(`branch:${r.name}`, async () => {
+        if (repoPath) await deleteLocalBranch(repoPath, r.branch)
+      })
+    if (r.db) await step(`db:${r.db}`, () => drop(repo, r.db!))
   }
-  for (const extra of session.extraDbs ?? []) {
-    const repo = cfg.repos.find((x) => x.name === extra.repo)
-    if (!repo?.db) continue
-    if (!extra.db.startsWith('agentify_') || sources.has(extra.db))
-      throw new Error(`Me negué a borrar la base ${extra.db}: no es una base de sesión`)
-    await dropDatabase(dbSource(repo).conn, extra.db)
-  }
-  const dir = sessionDir(cfg, id)
-  if (existsSync(dir)) {
+  for (const extra of session.extraDbs ?? [])
+    await step(`db:${extra.db}`, () =>
+      drop(
+        cfg.repos.find((x) => x.name === extra.repo),
+        extra.db
+      )
+    )
+  await step('dir', () => {
+    const dir = sessionDir(cfg, id)
+    if (!existsSync(dir)) return
     for (const r of session.repos) unlinkTopLevelLinks(r.worktree)
     rmSync(dir, { recursive: true, force: true })
-  }
+  })
   writeSessions(
     cfg.root,
     readSessions(cfg.root).filter((s) => s.id !== id)
   )
   return { status: 'deleted' }
+}
+
+/** One-shot delete: asks (returns needs-confirm) unless forced or nothing would be lost. */
+export async function deleteSession(
+  cfg: AppConfig,
+  id: string,
+  opts: { force: boolean; beforeRemove?: (s: Session) => Promise<void> }
+): Promise<DeleteResult> {
+  const plan = await planDelete(cfg, id)
+  if ((plan.risks.length || plan.processes.length) && !opts.force)
+    return { status: 'needs-confirm', risks: plan.risks, processes: plan.processes }
+  return runDelete(cfg, id, { confirmed: plan, beforeRemove: opts.beforeRemove, onStep: () => {} })
 }
 
 /** True when the worktree's migration files equal those of the commit the golden db was migrated to. */
