@@ -844,3 +844,94 @@ button.primary.danger-bg {
   border: none;
   font-size: 11px;
 }
+
+.update-results {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.warn-text {
+  color: var(--warn);
+}
+.chip.warn-chip {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.conflicts {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.conflicts-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.conflicts-body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.conflict-file {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.conflict-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.conflict-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.conflict-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.conflict-sides .side {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.conflict-sides .side.picked {
+  border-color: var(--ok);
+}
+.side-label {
+  font-size: 11px;
+  padding: 3px 8px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.conflict-sides pre {
+  margin: 0;
+  padding: 8px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+}
+.conflict-deleted {
+  gap: 10px;
+}
+.conflicts-done {
+  padding: 24px;
+  text-align: center;
+}

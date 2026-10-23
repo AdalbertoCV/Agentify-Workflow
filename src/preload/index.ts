@@ -41,6 +41,16 @@ const api: AgentifyApi = {
     onLog: (cb) => listen('test:log', cb)
   },
 
+  rebase: {
+    start: (id) => invoke('rebase:start', id),
+    state: (id) => invoke('rebase:state', id),
+    chunks: (id, repo, path) => invoke('rebase:chunks', id, repo, path),
+    resolve: (id, repo, path, how) => invoke('rebase:resolve', id, repo, path, how),
+    continue: (id, repo) => invoke('rebase:continue', id, repo),
+    abort: (id, repo) => invoke('rebase:abort', id, repo),
+    askAgent: (id, repo) => invoke('rebase:ask-agent', id, repo)
+  },
+
   capture: (wcId, rect) => invoke('capture', wcId, rect),
   diff: (id) => invoke('diff', id),
   commit: (id, message) => invoke('commit', id, message),

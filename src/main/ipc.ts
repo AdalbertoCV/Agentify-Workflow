@@ -22,7 +22,9 @@ import type { Issue } from './core/linear'
 import { onboardPrompt, readOnboardResult, saveRepo, startOnboarding } from './core/onboard'
 import { gitBash, runResolved, runShell } from './core/proc'
 import { Runner } from './core/runner'
-import { createSession, planDelete, runDelete, sessionDir } from './core/sessions'
+import { parseConflicts, resolveConflicts, type Choice } from './core/conflicts'
+import { abortRebase, continueRebase, rebaseState, resolveFile, startRebase, type RebaseState } from './core/rebase'
+import { createSession, planDelete, repoConfig as repoConfigOf, runDelete, sessionDir } from './core/sessions'
 import { readSessions, updateSession, type Session } from './core/store'
 import { providerFor } from './core/tickets'
 import { PtyManager } from './pty'
@@ -218,9 +220,7 @@ export function registerIpc(): void {
     broadcast('sessions:changed')
   })
 
-  ipcMain.handle('pty:open', async (_e, id: string) => {
-    const spec = terminals.get(id)
-    if (spec) return ptys.open(id, spec.cwd, spec.agent, spec.env, spec.firstArgs)
+  const openAgent = async (id: string): Promise<void> => {
     const c = requireCfg()
     const s = findSession(id)
     const dir = ensureSessionDir(c, s)
@@ -228,6 +228,12 @@ export function registerIpc(): void {
     if (agent.waiting === 'claude-hooks') installClaudeHooks(dir)
     const prompt = c.startPrompt?.replace(/{ticket}/g, s.ticket).replace(/{title}/g, s.title)
     await ptys.open(id, dir, agent, { AGENTIFY_SESSION: id }, undefined, s.imported ? undefined : prompt)
+  }
+
+  ipcMain.handle('pty:open', async (_e, id: string) => {
+    const spec = terminals.get(id)
+    if (spec) return ptys.open(id, spec.cwd, spec.agent, spec.env, spec.firstArgs)
+    await openAgent(id)
   })
   ipcMain.handle('pty:history', (_e, id: string) => ptys.history(id))
   ipcMain.on('pty:write', (_e, id: string, data: string) => ptys.write(id, data))
@@ -268,6 +274,63 @@ export function registerIpc(): void {
     } finally {
       if (!attached && dbg.isAttached()) dbg.detach()
     }
+  })
+
+  const sessionRepo = (id: string, name: string): { wt: string; repo: RepoConfig } => {
+    const r = findSession(id).repos.find((x) => x.name === name)
+    if (!r) throw new Error(`La sesión ${id} no tiene el repo ${name}`)
+    return { wt: r.worktree, repo: repoConfigOf(requireCfg(), name) }
+  }
+  ipcMain.handle('rebase:start', async (_e, id: string) => {
+    const out: { repo: string; status: string; replayed?: number; trunk: string; error?: string }[] = []
+    for (const r of findSession(id).repos) {
+      const repo = repoConfigOf(requireCfg(), r.name)
+      try {
+        out.push({ repo: r.name, trunk: repo.trunk, ...(await startRebase(r.worktree, repo.trunk, [...repo.copyFiles, ...repo.linkDirs])) })
+      } catch (e) {
+        out.push({ repo: r.name, trunk: repo.trunk, status: 'error', error: (e as Error).message })
+      }
+    }
+    return out
+  })
+  ipcMain.handle('rebase:state', async (_e, id: string) => {
+    const out: Record<string, RebaseState> = {}
+    for (const r of findSession(id).repos) if (existsSync(r.worktree)) out[r.name] = await rebaseState(r.worktree)
+    return out
+  })
+  ipcMain.handle('rebase:chunks', (_e, id: string, name: string, path: string) => {
+    const file = join(sessionRepo(id, name).wt, path)
+    return existsSync(file) ? parseConflicts(readFileSync(file, 'utf8')) : []
+  })
+  ipcMain.handle(
+    'rebase:resolve',
+    async (_e, id: string, name: string, path: string, how: { choices: Choice[] } | { keep: true } | { remove: true }) => {
+      const { wt } = sessionRepo(id, name)
+      const file = join(wt, path)
+      if ('remove' in how) return resolveFile(wt, path, null)
+      const text = readFileSync(file, 'utf8')
+      return resolveFile(wt, path, 'keep' in how ? text : resolveConflicts(parseConflicts(text), how.choices))
+    }
+  )
+  ipcMain.handle('rebase:continue', (_e, id: string, name: string) => continueRebase(sessionRepo(id, name).wt))
+  ipcMain.handle('rebase:abort', (_e, id: string, name: string) => abortRebase(sessionRepo(id, name).wt))
+  ipcMain.handle('rebase:ask-agent', async (_e, id: string, name: string) => {
+    const { wt, repo } = sessionRepo(id, name)
+    const { conflicts } = await rebaseState(wt)
+    const wasOpen = ptys.isOpen(id)
+    await openAgent(id)
+    // A freshly started agent ignores input until its screen settles.
+    if (!wasOpen)
+      for (let i = 0; i < 60 && Date.now() - ptys.lastOutputAt(id) < 2000; i++) await new Promise((r) => setTimeout(r, 500))
+    const files = conflicts.map((f) => f.path).join(', ')
+    ptys.write(
+      id,
+      `Hay un rebase en curso del repo ${name} (worktree ${wt}) sobre origin/${repo.trunk} con conflictos en: ${files}. ` +
+        'Resuélvelos editando esos archivos: conserva la intención de ambos lados, quita todos los marcadores de conflicto ' +
+        'y haz git add de cada archivo resuelto. No ejecutes git rebase --continue ni git rebase --abort; eso lo hago yo desde la app.'
+    )
+    await new Promise((r) => setTimeout(r, 300))
+    ptys.write(id, '\r')
   })
 
   ipcMain.handle('diff', (_e, id: string) => sessionDiff(requireCfg(), findSession(id)))

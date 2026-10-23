@@ -1,8 +1,9 @@
 import { html as diffHtml, parse } from 'diff2html'
 import type { DiffFile } from 'diff2html/lib/types'
 import { useEffect, useMemo, useState } from 'react'
-import type { CommitResult, RepoDiff, SessionInfo } from '../../../shared/api'
+import type { CommitResult, RebaseState, RepoDiff, SessionInfo } from '../../../shared/api'
 import { api, errorText, useInterval } from '../api'
+import { ConflictsPane } from './ConflictsPane'
 
 type Layout = 'line-by-line' | 'side-by-side'
 
@@ -28,6 +29,7 @@ export function DiffPane({ session }: { session: SessionInfo }): React.JSX.Eleme
   const [message, setMessage] = useState(`${session.ticket} `)
   const [committing, setCommitting] = useState(false)
   const [results, setResults] = useState<CommitResult[] | null>(null)
+  const [rebase, setRebase] = useState<Record<string, RebaseState>>({})
 
   const load = async (): Promise<void> => {
     if (document.hidden) return
@@ -39,18 +41,28 @@ export function DiffPane({ session }: { session: SessionInfo }): React.JSX.Eleme
     }
   }
 
+  const loadRebase = async (): Promise<void> => {
+    if (document.hidden) return
+    setRebase(await api.rebase.state(session.id).catch(() => ({})))
+  }
+
   useEffect(() => {
     void load()
+    void loadRebase()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id])
   useInterval(load, 3000)
+  useInterval(loadRebase, 2000)
 
   const current = diffs[Math.min(active, Math.max(diffs.length - 1, 0))]
   const files = useMemo(() => (current?.patch ? parse(current.patch) : []), [current?.patch])
   const totals = useMemo(
     () =>
       diffs.map((d) =>
-        parse(d.patch).reduce((t, f) => ({ add: t.add + f.addedLines, del: t.del + f.deletedLines }), { add: 0, del: 0 })
+        parse(d.patch).reduce(
+          (t, f) => ({ add: t.add + f.addedLines, del: t.del + f.deletedLines }),
+          { add: 0, del: 0 }
+        )
       ),
     [diffs]
   )
@@ -58,7 +70,10 @@ export function DiffPane({ session }: { session: SessionInfo }): React.JSX.Eleme
   // New files start open when the change is small, closed when it is big.
   const isOpen = (key: string): boolean => open[key] ?? files.length <= 4
   const setAll = (value: boolean): void =>
-    setOpen((o) => ({ ...o, ...Object.fromEntries(files.map((f) => [`${current.repo}:${fileName(f)}`, value])) }))
+    setOpen((o) => ({
+      ...o,
+      ...Object.fromEntries(files.map((f) => [`${current.repo}:${fileName(f)}`, value]))
+    }))
 
   const commit = async (): Promise<void> => {
     setCommitting(true)
@@ -73,6 +88,7 @@ export function DiffPane({ session }: { session: SessionInfo }): React.JSX.Eleme
     }
   }
 
+  const rebasing = Boolean(current && rebase[current.repo]?.inProgress)
   const changed = diffs.some((d) => d.files > 0 || d.unpushed > 0)
   const unpushed = diffs.reduce((n, d) => n + d.unpushed, 0)
 
@@ -82,9 +98,23 @@ export function DiffPane({ session }: { session: SessionInfo }): React.JSX.Eleme
         <span className="label">Diff</span>
         <div className="diff-tabs">
           {diffs.map((d, i) => (
-            <button key={d.repo} className={i === active ? '' : 'ghost'} onClick={() => setActive(i)}>
-              {d.repo} <span className="plus">+{totals[i]?.add ?? 0}</span> <span className="minus">−{totals[i]?.del ?? 0}</span>
-              {d.unpushed > 0 && <span className="chip" title="Commits que aún no están en origin">↑{d.unpushed}</span>}
+            <button
+              key={d.repo}
+              className={i === active ? '' : 'ghost'}
+              onClick={() => setActive(i)}
+            >
+              {d.repo} <span className="plus">+{totals[i]?.add ?? 0}</span>{' '}
+              <span className="minus">−{totals[i]?.del ?? 0}</span>
+              {d.unpushed > 0 && (
+                <span className="chip" title="Commits que aún no están en origin">
+                  ↑{d.unpushed}
+                </span>
+              )}
+              {rebase[d.repo]?.inProgress && (
+                <span className="chip warn-chip" title="Rebase en curso">
+                  ⟲ {rebase[d.repo].conflicts.length || '✓'}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -106,35 +136,53 @@ export function DiffPane({ session }: { session: SessionInfo }): React.JSX.Eleme
           ⟳
         </button>
       </div>
-      <div className="commit-bar">
-        <input
-          value={message}
-          placeholder="Mensaje del commit"
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && changed && !committing && commit()}
-        />
-        <button className="primary" disabled={committing || !changed} onClick={commit}>
-          {committing ? 'Subiendo…' : files.length || diffs.some((d) => d.files > 0) ? 'Commit y push' : 'Push'}
-        </button>
-      </div>
-      {results && (
-        <div className="commit-results">
-          {results.map((r) => (
-            <div key={r.repo} className={r.error ? 'error' : 'muted'}>
-              {r.repo}:{' '}
-              {r.error ??
-                (r.committed || r.pushed
-                  ? `${r.committed ? 'commit' : ''}${r.committed && r.pushed ? ' + ' : ''}${r.pushed ? 'push' : ''} ✓ ${r.sha ?? ''}`
-                  : 'nada que subir')}
+      {!rebasing && (
+        <>
+          <div className="commit-bar">
+            <input
+              value={message}
+              placeholder="Mensaje del commit"
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && changed && !committing && commit()}
+            />
+            <button className="primary" disabled={committing || !changed} onClick={commit}>
+              {committing
+                ? 'Subiendo…'
+                : files.length || diffs.some((d) => d.files > 0)
+                  ? 'Commit y push'
+                  : 'Push'}
+            </button>
+          </div>
+          {results && (
+            <div className="commit-results">
+              {results.map((r) => (
+                <div key={r.repo} className={r.error ? 'error' : 'muted'}>
+                  {r.repo}:{' '}
+                  {r.error ??
+                    (r.committed || r.pushed
+                      ? `${r.committed ? 'commit' : ''}${r.committed && r.pushed ? ' + ' : ''}${r.pushed ? (r.forced ? 'push forzado (--force-with-lease)' : 'push') : ''} ✓ ${r.sha ?? ''}`
+                      : 'nada que subir')}
+                </div>
+              ))}
+              <button className="ghost" onClick={() => setResults(null)}>
+                ✕
+              </button>
             </div>
-          ))}
-          <button className="ghost" onClick={() => setResults(null)}>
-            ✕
-          </button>
-        </div>
+          )}
+        </>
       )}
       <div className="pane-body">
-        {error ? (
+        {rebasing ? (
+          <ConflictsPane
+            id={session.id}
+            repo={current.repo}
+            state={rebase[current.repo]}
+            onChanged={() => {
+              void loadRebase()
+              void load()
+            }}
+          />
+        ) : error ? (
           <div className="placeholder error">{error}</div>
         ) : files.length ? (
           <div className="diff-body">
@@ -143,7 +191,10 @@ export function DiffPane({ session }: { session: SessionInfo }): React.JSX.Eleme
               const st = status(f)
               return (
                 <div key={key} className="diff-file">
-                  <div className="diff-file-head" onClick={() => setOpen((o) => ({ ...o, [key]: !isOpen(key) }))}>
+                  <div
+                    className="diff-file-head"
+                    onClick={() => setOpen((o) => ({ ...o, [key]: !isOpen(key) }))}
+                  >
                     <span className="chev">{isOpen(key) ? '▾' : '▸'}</span>
                     <span className={`st ${st.cls}`}>{st.label}</span>
                     <span className="path mono">{fileName(f)}</span>
@@ -154,7 +205,11 @@ export function DiffPane({ session }: { session: SessionInfo }): React.JSX.Eleme
                   {isOpen(key) && (
                     <div
                       dangerouslySetInnerHTML={{
-                        __html: diffHtml([f], { drawFileList: false, outputFormat: layout, matching: 'lines' })
+                        __html: diffHtml([f], {
+                          drawFileList: false,
+                          outputFormat: layout,
+                          matching: 'lines'
+                        })
                       }}
                     />
                   )}
