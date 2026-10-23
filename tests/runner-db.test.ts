@@ -156,3 +156,62 @@ test('Probar migrates the session db of a repo in the session, so new migrations
   await runner.stop('t-8')
   expect(readFileSync(join(root, 'migrated.txt'), 'utf8').trim().split(/\r?\n/)).toEqual(['agentify_t_8'])
 })
+
+test('Probar migrates again only when the migration files changed, committed or not', async () => {
+  const root = tempDir()
+  const { clone } = makeOriginAndClone(root, 'main', 'api')
+  writeFileSync(join(clone, '.env'), 'DB_NAME=mylocal\nDB_USER=u\nDB_PASSWORD=p\nDB_HOST=localhost\nDB_PORT=5432\n')
+  mkdirSync(join(clone, 'migrations'))
+  writeFileSync(join(clone, 'migrations', '0001_initial.py'), '# 1\n')
+  mkdirSync(join(root, 'scripts'))
+  writeFileSync(join(root, 'scripts', 'serve.sh'), `${SERVE}\n`)
+  const cfg: AppConfig = {
+    root,
+    branchPrefix: 'p',
+    repos: [
+      {
+        name: 'api',
+        path: clone,
+        trunk: 'main',
+        copyFiles: ['.env'],
+        linkDirs: [],
+        setup: ['echo "$DB_NAME" >> "$AGENTIFY_ROOT/migrated.txt"'],
+        db: {
+          envFile: '.env',
+          nameKey: 'DB_NAME',
+          userKey: 'DB_USER',
+          passwordKey: 'DB_PASSWORD',
+          hostKey: 'DB_HOST',
+          portKey: 'DB_PORT',
+          source: 'empty',
+          migrationPaths: ['migrations/*.py']
+        },
+        run: { script: 'scripts/serve.sh', port: true }
+      }
+    ],
+    agents: [{ id: 'claude', label: 'Claude', command: 'claude', args: [], resumeArgs: [] }],
+    defaultAgent: 'claude'
+  }
+  const session = {
+    id: 't-9',
+    ticket: 'T-9',
+    title: 'x',
+    agent: 'claude',
+    createdAt: '',
+    imported: false,
+    repos: [{ name: 'api', worktree: clone, branch: 'main', createdBranch: false, db: 'agentify_t_9' }]
+  }
+  writeSessions(root, [session])
+  existing.add('agentify_t_9')
+  const runner = new Runner()
+  const probar = async (): Promise<number> => {
+    await runner.start(cfg, session, () => {})
+    await runner.stop('t-9')
+    return readFileSync(join(root, 'migrated.txt'), 'utf8').trim().split(/\r?\n/).length
+  }
+  expect(await probar()).toBe(1)
+  expect(await probar()).toBe(1)
+  writeFileSync(join(clone, 'migrations', '0002_new.py'), '# 2\n')
+  expect(await probar()).toBe(2)
+  expect(await probar()).toBe(2)
+})

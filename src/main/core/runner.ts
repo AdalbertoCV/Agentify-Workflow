@@ -4,6 +4,7 @@ import { isAbsolute, join } from 'node:path'
 import type { AppConfig, RepoConfig } from './config'
 import { databaseExists, dropDatabase } from './db'
 import { cloneFromGolden, ensureGolden } from './golden'
+import { markMigrated, migratedFingerprint, migrationsFingerprint } from './migrations'
 import { allocatePorts, listenersOn, portAnswers } from './ports'
 import { gitBash, run, runShell } from './proc'
 import { dbSource, sameMigrationsAsGolden, sessionDir } from './sessions'
@@ -129,8 +130,14 @@ export class Runner {
         if (ports[repo.name]) env.AGENTIFY_PORT = String(ports[repo.name])
         if (repo.db) {
           const dbName = own?.db ?? (await this.ensureSessionDb(cfg, session, repo, cwd, log))
-          // The branch may have gained migrations since the session db was made.
-          if (own?.db) await this.migrate(cfg, repo, cwd, dbName, log)
+          // The branch may have gained migrations since the session db was last migrated.
+          if (own?.db) {
+            const fp = await migrationsFingerprint(repo, cwd)
+            if (!fp || fp !== migratedFingerprint(sessionDir(cfg, session.id), repo.name)) {
+              await this.migrate(cfg, repo, cwd, dbName, log)
+              if (fp) markMigrated(sessionDir(cfg, session.id), repo.name, fp)
+            }
+          }
           env.AGENTIFY_DB_NAME = dbName
           env[repo.db.nameKey] = dbName
         }

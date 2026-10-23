@@ -14,6 +14,7 @@ import {
   worktreeRisk
 } from './git'
 import { linkDir, unlinkTopLevelLinks } from './links'
+import { markMigrated, migrationsFingerprint } from './migrations'
 import { ensureTrunkWorktree } from './trunk'
 import { killTree, processesUsing, run, runShell, type RunningProcess } from './proc'
 import { dbNameFor, sessionIdFor, slugify } from './slug'
@@ -211,6 +212,10 @@ export async function createSession(
           onProgress(`${name}: ${line}`)
           await runShell(line, { cwd: wt, env })
         }
+      }
+      if (entry.db) {
+        const fp = await migrationsFingerprint(repo, wt)
+        if (fp) markMigrated(dir, name, fp)
       }
       repos.push(entry)
     }
