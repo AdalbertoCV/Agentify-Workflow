@@ -16,8 +16,12 @@ function FirstRun({ onReady }: { onReady: (c: AppConfig) => void }): React.JSX.E
       <div className="brand" style={{ fontSize: 22 }}>
         <img src={logo} alt="" className="brand-logo" /> Agentify-Workflow
       </div>
-      <div style={{ fontSize: 16, color: 'var(--text)' }}>Elige la carpeta donde viven tus repos</div>
-      <div className="muted">Detecto los repos que hay ahí y preparo todo. Puedes cambiarla después.</div>
+      <div style={{ fontSize: 16, color: 'var(--text)' }}>
+        Elige la carpeta donde viven tus repos
+      </div>
+      <div className="muted">
+        Detecto los repos que hay ahí y preparo todo. Puedes cambiarla después.
+      </div>
       <button
         className="primary"
         onClick={async () => {
@@ -44,6 +48,11 @@ export default function App(): React.JSX.Element {
   const [openId, setOpenId] = useState<string | null>(null)
   const [failing, setFailing] = useState(0)
   const [activity, setActivity] = useState('')
+  const [build, setBuild] = useState<{
+    version: string
+    commit?: string
+    newer: string | null
+  } | null>(null)
 
   useEffect(() => {
     api
@@ -65,9 +74,24 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     if (!cfg) return
     refresh()
-    void api.connectors().then((c) => setFailing(c.filter((x) => !x.ok).length)).catch(() => {})
+    void api
+      .connectors()
+      .then((c) => setFailing(c.filter((x) => !x.ok).length))
+      .catch(() => {})
     return api.onSessionsChanged(refresh)
   }, [cfg, refresh])
+
+  // The main process keeps the code it started with: say so when a newer commit is on disk.
+  useEffect(() => {
+    const check = (): void =>
+      void api
+        .build()
+        .then(setBuild)
+        .catch(() => {})
+    check()
+    const t = setInterval(check, 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   // Background work (base madre, creations) shows up in the top bar so something visibly happens.
   useEffect(() => {
@@ -87,7 +111,11 @@ export default function App(): React.JSX.Element {
   if (cfg === null)
     return (
       <div className="app">
-        {cfgError && <div className="error" style={{ padding: 16 }}>{cfgError}</div>}
+        {cfgError && (
+          <div className="error" style={{ padding: 16 }}>
+            {cfgError}
+          </div>
+        )}
         <FirstRun onReady={setCfg} />
       </div>
     )
@@ -107,20 +135,52 @@ export default function App(): React.JSX.Element {
           <img src={logo} alt="" className="brand-logo" /> Agentify-Workflow
         </div>
         <div className="tabs">
-          <button className={`tab ${tab === 'sessions' ? 'active' : ''}`} onClick={() => setTab('sessions')}>
+          <button
+            className={`tab ${tab === 'sessions' ? 'active' : ''}`}
+            onClick={() => setTab('sessions')}
+          >
             Sesiones
           </button>
-          <button className={`tab ${tab === 'connectors' ? 'active' : ''}`} onClick={() => setTab('connectors')}>
+          <button
+            className={`tab ${tab === 'connectors' ? 'active' : ''}`}
+            onClick={() => setTab('connectors')}
+          >
             Conectores{failing > 0 && <span className="badge" />}
           </button>
-          <button className={`tab ${tab === 'repos' ? 'active' : ''}`} onClick={() => setTab('repos')}>
+          <button
+            className={`tab ${tab === 'repos' ? 'active' : ''}`}
+            onClick={() => setTab('repos')}
+          >
             Repos
           </button>
         </div>
         <span className="spacer" />
         {activity && (
-          <span className={activity.startsWith('✗') ? 'error' : 'status'} title={activity} style={{ maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span
+            className={activity.startsWith('✗') ? 'error' : 'status'}
+            title={activity}
+            style={{
+              maxWidth: 520,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
             {!activity.startsWith('✗') && <span className="dot warn pulse" />} {activity}
+          </span>
+        )}
+        {build && (
+          <span
+            className={build.newer ? 'warn-text mono' : 'muted mono'}
+            title={
+              build.newer
+                ? `En disco ya está ${build.newer}; cierra la app y vuelve a abrirla para usarlo.`
+                : 'Versión con la que arrancó la app'
+            }
+          >
+            v{build.version}
+            {build.commit ? ` · ${build.commit}` : ''}
+            {build.newer ? ' · hay una versión más nueva: reinicia la app' : ''}
           </span>
         )}
         <span className="muted mono" title="Carpeta raíz">
@@ -149,7 +209,7 @@ export default function App(): React.JSX.Element {
           onConnect={() => setTab('connectors')}
         />
       )}
-      {tab === 'connectors' && <Connectors onChecked={setFailing} onConfig={setCfg} />}
+      {tab === 'connectors' && <Connectors cfg={cfg} onChecked={setFailing} onConfig={setCfg} />}
       {tab === 'repos' && <Repos cfg={cfg} onSaved={setCfg} />}
     </div>
   )
