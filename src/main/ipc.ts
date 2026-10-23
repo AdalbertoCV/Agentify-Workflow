@@ -22,8 +22,16 @@ import type { Issue } from './core/linear'
 import { onboardPrompt, readOnboardResult, saveRepo, startOnboarding } from './core/onboard'
 import { gitBash, runResolved, runShell } from './core/proc'
 import { Runner } from './core/runner'
-import { parseConflicts, resolveConflicts, type Choice } from './core/conflicts'
-import { abortRebase, continueRebase, rebaseState, resolveFile, startRebase, type RebaseState } from './core/rebase'
+import {
+  abortRebase,
+  conflictChunks,
+  continueRebase,
+  rebaseState,
+  resolveConflictFile,
+  startRebase,
+  type RebaseState,
+  type Resolution
+} from './core/rebase'
 import { createSession, planDelete, repoConfig as repoConfigOf, runDelete, sessionDir } from './core/sessions'
 import { readSessions, updateSession, type Session } from './core/store'
 import { providerFor } from './core/tickets'
@@ -298,19 +306,11 @@ export function registerIpc(): void {
     for (const r of findSession(id).repos) if (existsSync(r.worktree)) out[r.name] = await rebaseState(r.worktree)
     return out
   })
-  ipcMain.handle('rebase:chunks', (_e, id: string, name: string, path: string) => {
-    const file = join(sessionRepo(id, name).wt, path)
-    return existsSync(file) ? parseConflicts(readFileSync(file, 'utf8')) : []
-  })
-  ipcMain.handle(
-    'rebase:resolve',
-    async (_e, id: string, name: string, path: string, how: { choices: Choice[] } | { keep: true } | { remove: true }) => {
-      const { wt } = sessionRepo(id, name)
-      const file = join(wt, path)
-      if ('remove' in how) return resolveFile(wt, path, null)
-      const text = readFileSync(file, 'utf8')
-      return resolveFile(wt, path, 'keep' in how ? text : resolveConflicts(parseConflicts(text), how.choices))
-    }
+  ipcMain.handle('rebase:chunks', (_e, id: string, name: string, path: string) =>
+    conflictChunks(sessionRepo(id, name).wt, path)
+  )
+  ipcMain.handle('rebase:resolve', (_e, id: string, name: string, path: string, how: Resolution) =>
+    resolveConflictFile(sessionRepo(id, name).wt, path, how)
   )
   ipcMain.handle('rebase:continue', (_e, id: string, name: string) => continueRebase(sessionRepo(id, name).wt))
   ipcMain.handle('rebase:abort', (_e, id: string, name: string) => abortRebase(sessionRepo(id, name).wt))
@@ -329,8 +329,11 @@ export function registerIpc(): void {
         'Resuélvelos editando esos archivos: conserva la intención de ambos lados, quita todos los marcadores de conflicto ' +
         'y haz git add de cada archivo resuelto. No ejecutes git rebase --continue ni git rebase --abort; eso lo hago yo desde la app.'
     )
+    // An agent that was already open may be showing a permission prompt: an Enter could approve it.
+    if (wasOpen) return { submitted: false }
     await new Promise((r) => setTimeout(r, 300))
     ptys.write(id, '\r')
+    return { submitted: true }
   })
 
   ipcMain.handle('diff', (_e, id: string) => sessionDiff(requireCfg(), findSession(id)))

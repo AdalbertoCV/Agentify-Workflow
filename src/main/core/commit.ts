@@ -52,9 +52,18 @@ export async function commitAndPush(cfg: AppConfig, s: Session, message: string)
             () => true,
             () => false
           ))
-        // A lease only overwrites the commit we last saw on origin, never someone else's push.
-        const lease = rewritten ? [`--force-with-lease=${branch}:${remote}`] : []
-        await git(r.worktree, 'push', '-u', ...lease, 'origin', branch)
+        // Overwrite only what this branch itself once had (its own pre-rebase commits): a commit
+        // someone else pushed, even if fetched, was never in our reflog and makes the push fail.
+        const lease = rewritten ? [`--force-with-lease=${branch}`, '--force-if-includes'] : []
+        try {
+          await git(r.worktree, 'push', '-u', ...lease, 'origin', branch)
+        } catch (e) {
+          if (!rewritten) throw e
+          throw new Error(
+            `origin/${branch} tiene commits que tu rama nunca tuvo (¿alguien más subió?). Tráelos antes de subir; no los sobrescribo.`,
+            { cause: e }
+          )
+        }
         res.pushed = true
         if (rewritten) res.forced = true
       }

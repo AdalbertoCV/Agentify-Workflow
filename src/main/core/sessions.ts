@@ -102,10 +102,10 @@ function deleteSteps(session: Session): DeleteStep[] {
     steps.push({ id: `wt:${r.name}`, label: `${r.name}: quitar worktree`, state: 'pending' })
     if (r.createdBranch)
       steps.push({ id: `branch:${r.name}`, label: `${r.name}: borrar rama ${r.branch}`, state: 'pending' })
-    if (r.db) steps.push({ id: `db:${r.db}`, label: `borrar base ${r.db}`, state: 'pending' })
+    if (r.db) steps.push({ id: `db:${r.name}:${r.db}`, label: `borrar base ${r.db}`, state: 'pending' })
   }
   for (const extra of session.extraDbs ?? [])
-    steps.push({ id: `db:${extra.db}`, label: `borrar base ${extra.db}`, state: 'pending' })
+    steps.push({ id: `extra-db:${extra.repo}:${extra.db}`, label: `borrar base ${extra.db}`, state: 'pending' })
   steps.push({ id: 'dir', label: 'Borrar carpeta de la sesión', state: 'pending' })
   return steps
 }
@@ -174,14 +174,18 @@ export async function runDelete(
     emit()
   }
 
-  const risks = await sessionRisks(cfg, session)
-  const unseen = risks.some((r) => {
-    const seen = opts.confirmed.risks.find((c) => c.repo === r.repo)
-    return (r.dirty && !seen?.dirty) || r.unpushed > (seen?.unpushed ?? 0)
-  })
-  if (unseen) return { status: 'needs-confirm', risks, processes: opts.confirmed.processes } satisfies NeedsConfirm
+  const unseen = (risks: RepoRisk[]): boolean =>
+    risks.some((r) => {
+      const seen = opts.confirmed.risks.find((c) => c.repo === r.repo)
+      return (r.dirty && !seen?.dirty) || r.unpushed > (seen?.unpushed ?? 0)
+    })
+  let risks = await sessionRisks(cfg, session)
+  if (unseen(risks)) return { status: 'needs-confirm', risks, processes: opts.confirmed.processes } satisfies NeedsConfirm
 
   await step('stop', () => opts.beforeRemove?.(session))
+  // The agent could still write while it was being stopped.
+  risks = await sessionRisks(cfg, session)
+  if (unseen(risks)) return { status: 'needs-confirm', risks, processes: opts.confirmed.processes }
   let processes: RunningProcess[] = []
   await step('procs', async () => {
     processes = await foreignProcesses(session, (await opts.ignorePids?.()) ?? [])
@@ -209,10 +213,10 @@ export async function runDelete(
       await step(`branch:${r.name}`, async () => {
         if (repoPath) await deleteLocalBranch(repoPath, r.branch)
       })
-    if (r.db) await step(`db:${r.db}`, () => drop(repo, r.db!))
+    if (r.db) await step(`db:${r.name}:${r.db}`, () => drop(repo, r.db!))
   }
   for (const extra of session.extraDbs ?? [])
-    await step(`db:${extra.db}`, () =>
+    await step(`extra-db:${extra.repo}:${extra.db}`, () =>
       drop(
         cfg.repos.find((x) => x.name === extra.repo),
         extra.db

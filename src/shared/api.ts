@@ -1,6 +1,6 @@
 import type { AppConfig, RepoConfig, TestUser, TicketProviderId } from '../main/core/config'
-import type { Chunk, Choice } from '../main/core/conflicts'
-import type { RebaseState } from '../main/core/rebase'
+import type { Chunk } from '../main/core/conflicts'
+import type { RebaseState, Resolution } from '../main/core/rebase'
 import type { DeletePlan, DeleteStep, Session } from '../main/core/sessions'
 
 export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser, TicketProviderId }
@@ -53,9 +53,8 @@ export type CommitResult = {
 }
 
 export type { Chunk, Choice } from '../main/core/conflicts'
-export type { ConflictFile, RebaseState } from '../main/core/rebase'
+export type { ConflictFile, RebaseState, Resolution } from '../main/core/rebase'
 export type RebaseStart = { repo: string; trunk: string; status: string; replayed?: number; error?: string }
-export type Resolution = { choices: Choice[] } | { keep: true } | { remove: true }
 
 export type OnboardStart = { repoName: string; repoPath: string; workDir: string; terminalId: string }
 
@@ -105,7 +104,8 @@ export interface AgentifyApi {
     resolve(id: string, repo: string, path: string, how: Resolution): Promise<void>
     continue(id: string, repo: string): Promise<{ status: 'conflicts' | 'done' }>
     abort(id: string, repo: string): Promise<void>
-    askAgent(id: string, repo: string): Promise<void>
+    /** submitted false: typed into an agent that was already open; the user presses Enter. */
+    askAgent(id: string, repo: string): Promise<{ submitted: boolean }>
   }
 
   capture(webContentsId: number, rect?: { x: number; y: number; width: number; height: number }): Promise<void>

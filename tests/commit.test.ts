@@ -78,3 +78,17 @@ test('a normal push is not forced', async () => {
   expect(r).toMatchObject({ pushed: true })
   expect(r.forced).toBeUndefined()
 })
+
+test('a teammate commit fetched but never integrated is not overwritten by the push', async () => {
+  const { cfg, s, wt, origin } = setup()
+  await addWorktree(cfg.repos[0].path, wt, 'p/t-1-x', 'main')
+  writeFileSync(join(wt, 'feature.txt'), 'x\n')
+  await commitAndPush(cfg, s, 'T-1 first')
+  const teammate = pushBranch(cfg.root, origin, 'p/t-1-x', 'p/t-1-x')
+  git(wt, 'fetch', '-q', 'origin')
+  writeFileSync(join(wt, 'feature.txt'), 'mine\n')
+  const [r] = await commitAndPush(cfg, s, 'T-1 mine')
+  expect(r.forced).toBeUndefined()
+  expect(r.error).toBeDefined()
+  expect(git(origin, 'rev-parse', 'p/t-1-x')).toBe(teammate)
+})

@@ -935,3 +935,6 @@ button.primary.danger-bg {
   padding: 24px;
   text-align: center;
 }
+.conflicts-note {
+  padding: 6px 12px;
+}

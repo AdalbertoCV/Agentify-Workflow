@@ -30,12 +30,17 @@ export function parseConflicts(text: string): Chunk[] {
     else if (state === 'main') main += line
     else if (state === 'branch') branch += line
   }
+  // A block that never closes (or a line that only looks like a marker) would lose the rest.
+  if (state !== 'text') throw new Error('No pude leer los marcadores de conflicto de este archivo; pídeselo al agente.')
   if (plain) chunks.push({ kind: 'text', text: plain })
   return chunks
 }
 
 /** The file with each conflict replaced by the chosen side; "both" puts main first. */
 export function resolveConflicts(chunks: Chunk[], choices: Choice[]): string {
+  const count = chunks.filter((c) => c.kind === 'conflict').length
+  if (choices.length !== count || choices.some((c) => !['main', 'branch', 'both'].includes(c)))
+    throw new Error('Falta elegir algún bloque, o el archivo cambió desde que elegiste; vuelve a elegir.')
   let i = 0
   return chunks
     .map((c) => {

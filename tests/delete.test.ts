@@ -158,7 +158,7 @@ describe('planDelete / runDelete', () => {
       'procs',
       'wt:api',
       'branch:api',
-      'db:agentify_t_5',
+      'db:api:agentify_t_5',
       'wt:web',
       'branch:web',
       'dir'
@@ -204,7 +204,33 @@ describe('planDelete / runDelete', () => {
     await expect(
       runDelete(cfg, 't-8', { confirmed: plan, onStep: (steps) => (last = steps) })
     ).rejects.toThrow('db en uso')
-    expect(last.find((s) => s.id === 'db:agentify_t_8')).toMatchObject({ state: 'failed', error: 'db en uso' })
+    expect(last.find((s) => s.id === 'db:api:agentify_t_8')).toMatchObject({ state: 'failed', error: 'db en uso' })
     expect(readSessions(cfg.root).map((x) => x.id)).toEqual(['t-8'])
+  })
+
+  test('two databases with the same name get their own steps, all of them done', async () => {
+    const cfg = setup()
+    await createSession(cfg, { ticket: 'T-9', title: 'x', repos: ['api'] }, () => {})
+    const { updateSession } = await import('../src/main/core/store')
+    updateSession(cfg.root, 't-9', { extraDbs: [{ repo: 'api', db: 'agentify_t_9' }] })
+    const plan = await planDelete(cfg, 't-9')
+    const ids = plan.steps.map((s) => s.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    let last: { state: string }[] = []
+    await runDelete(cfg, 't-9', { confirmed: plan, onStep: (steps) => (last = steps) })
+    expect(last.every((s) => s.state === 'done')).toBe(true)
+  })
+
+  test('work the agent writes while it is being stopped pauses the delete', async () => {
+    const cfg = setup()
+    const s = await createSession(cfg, { ticket: 'T-10', title: 'x', repos: ['api'] }, () => {})
+    const plan = await planDelete(cfg, 't-10')
+    const r = await runDelete(cfg, 't-10', {
+      confirmed: plan,
+      beforeRemove: async () => writeFileSync(join(s.repos[0].worktree, 'last-words.txt'), 'x'),
+      onStep: () => {}
+    })
+    expect(r.status).toBe('needs-confirm')
+    expect(existsSync(join(s.repos[0].worktree, 'last-words.txt'))).toBe(true)
   })
 })

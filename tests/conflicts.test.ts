@@ -47,3 +47,11 @@ test('keeps CRLF line endings', () => {
 test('a file without markers is one text chunk', () => {
   expect(parseConflicts('just text\n')).toEqual([{ kind: 'text', text: 'just text\n' }])
 })
+
+test('an unterminated conflict block is refused instead of truncating the file', () => {
+  expect(() => parseConflicts('a\n<<<<<<< HEAD\nmain\n=======\nbranch\nrest of the file\n')).toThrow()
+})
+
+test('a missing choice is refused instead of silently keeping both sides', () => {
+  expect(() => resolveConflicts(parseConflicts(two), ['main'])).toThrow()
+})

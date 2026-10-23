@@ -1,7 +1,15 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { abortRebase, continueRebase, rebaseState, resolveFile, startRebase } from '../src/main/core/rebase'
+import {
+  abortRebase,
+  conflictChunks,
+  continueRebase,
+  rebaseState,
+  resolveConflictFile,
+  resolveFile,
+  startRebase
+} from '../src/main/core/rebase'
 import { git, makeOriginAndClone, tempDir } from './helpers/git'
 
 let n = 0
@@ -126,4 +134,71 @@ test('when git cannot continue for another reason, nothing is skipped', { timeou
   rmSync(join(wt, '.git', 'index.lock'))
   expect((await rebaseState(wt)).inProgress).toBe(true)
   expect(readFileSync(join(wt, 'README.md'), 'utf8')).toBe('resolved\n')
+})
+
+test('an empty commit is not skipped while there are edits not added, so they survive', async () => {
+  const { root, origin, wt } = setup()
+  branchCommit(wt, 'notes.txt', 'v1\n', 'feat: notes')
+  branchCommit(wt, 'README.md', 'branch\n', 'feat: readme')
+  mainCommit(root, origin, 'README.md', 'main\n')
+  expect(await startRebase(wt, 'main')).toEqual({ status: 'conflicts' })
+  await resolveFile(wt, 'README.md', 'main\n')
+  writeFileSync(join(wt, 'notes.txt'), 'edited by the agent\n')
+  await expect(continueRebase(wt)).rejects.toThrow(/sin agregar/)
+  expect(readFileSync(join(wt, 'notes.txt'), 'utf8')).toBe('edited by the agent\n')
+})
+
+test('keeping a binary file in a deleted/changed conflict keeps its exact bytes', async () => {
+  const { root, origin, wt } = setup()
+  const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x80])
+  writeFileSync(join(wt, 'img.png'), bytes)
+  git(wt, 'add', '.')
+  git(wt, 'commit', '-qm', 'add img')
+  git(wt, 'push', '-q', 'origin', 'feat:main')
+  writeFileSync(join(wt, 'img.png'), Buffer.concat([bytes, Buffer.from([0x01])]))
+  git(wt, 'commit', '-qam', 'feat: change img')
+  const tmp = join(root, 'del-img')
+  git(root, 'clone', '-q', origin, tmp)
+  git(tmp, 'config', 'user.email', 't@t')
+  git(tmp, 'config', 'user.name', 't')
+  git(tmp, 'rm', '-q', 'img.png')
+  git(tmp, 'commit', '-qm', 'main: delete img')
+  git(tmp, 'push', '-q', 'origin', 'main')
+  await startRebase(wt, 'main')
+  await resolveConflictFile(wt, 'img.png', { keep: true })
+  expect(readFileSync(join(wt, 'img.png')).equals(Buffer.concat([bytes, Buffer.from([0x01])]))).toBe(true)
+})
+
+test('choosing sides in a Latin-1 file keeps its bytes, and paths with accents work', async () => {
+  const { root, origin, wt } = setup()
+  const file = 'configuración.txt'
+  writeFileSync(join(wt, file), Buffer.from('a\xf1o\n', 'latin1'))
+  git(wt, 'add', '.')
+  git(wt, 'commit', '-qm', 'add')
+  git(wt, 'push', '-q', 'origin', 'feat:main')
+  writeFileSync(join(wt, file), Buffer.from('rama \xe9\n', 'latin1'))
+  git(wt, 'commit', '-qam', 'feat: change')
+  const tmp = join(root, 'latin')
+  git(root, 'clone', '-q', origin, tmp)
+  git(tmp, 'config', 'user.email', 't@t')
+  git(tmp, 'config', 'user.name', 't')
+  writeFileSync(join(tmp, file), Buffer.from('main \xe1\n', 'latin1'))
+  git(tmp, 'commit', '-qam', 'main: change')
+  git(tmp, 'push', '-q', 'origin', 'main')
+  await startRebase(wt, 'main')
+  expect((await rebaseState(wt)).conflicts).toEqual([{ path: file, kind: 'text' }])
+  const chunks = await conflictChunks(wt, file)
+  expect(chunks.filter((c) => c.kind === 'conflict')).toHaveLength(1)
+  await resolveConflictFile(wt, file, { choices: ['branch'], conflicts: 1 })
+  // Line endings follow core.autocrlf on checkout; the accented byte must stay Latin-1.
+  expect(readFileSync(join(wt, file)).toString('latin1').replace(/\r/g, '')).toBe('rama \xe9\n')
+})
+
+test('choices made on an older version of the file are refused', async () => {
+  const { root, origin, wt } = setup()
+  branchCommit(wt, 'README.md', 'branch\n', 'feat: readme')
+  mainCommit(root, origin, 'README.md', 'main\n')
+  await startRebase(wt, 'main')
+  await expect(resolveConflictFile(wt, 'README.md', { choices: ['main', 'main'], conflicts: 2 })).rejects.toThrow()
+  expect(readFileSync(join(wt, 'README.md'), 'utf8')).toContain('<<<<<<<')
 })

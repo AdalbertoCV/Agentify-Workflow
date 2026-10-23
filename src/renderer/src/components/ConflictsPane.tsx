@@ -52,7 +52,7 @@ function ConflictFileView({
           <button
             className="primary"
             disabled={!ready}
-            onClick={() => resolve({ choices: choices as Choice[] })}
+            onClick={() => resolve({ choices: choices as Choice[], conflicts: conflicts.length })}
           >
             Marcar resuelto
           </button>
@@ -122,7 +122,7 @@ export function ConflictsPane({
 }): React.JSX.Element {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
-  const [asked, setAsked] = useState(false)
+  const [asked, setAsked] = useState<'' | 'sent' | 'typed'>('')
 
   const act = async (label: string, work: () => Promise<unknown>): Promise<void> => {
     setBusy(label)
@@ -161,10 +161,10 @@ export function ConflictsPane({
             disabled={!!busy}
             title="Escribe en la terminal del agente qué archivos resolver"
             onClick={() =>
-              act('agent', () => api.rebase.askAgent(id, repo).then(() => setAsked(true)))
+              act('agent', () => api.rebase.askAgent(id, repo).then((r) => setAsked(r.submitted ? 'sent' : 'typed')))
             }
           >
-            {busy === 'agent' ? 'Enviando…' : asked ? 'Pedido al agente ✓' : 'Pedirle al agente'}
+            {busy === 'agent' ? 'Enviando…' : asked === 'sent' ? 'Pedido al agente ✓' : 'Pedirle al agente'}
           </button>
         )}
         <button
@@ -182,6 +182,11 @@ export function ConflictsPane({
           {busy === 'continue' ? 'Continuando…' : 'Continuar rebase'}
         </button>
       </div>
+      {asked === 'typed' && (
+        <div className="warn-text conflicts-note">
+          Escribí el pedido en la terminal del agente; revísalo y presiona Enter ahí.
+        </div>
+      )}
       {error && <div className="error">{error}</div>}
       <div className="conflicts-body">
         {state.conflicts.map((f) => (

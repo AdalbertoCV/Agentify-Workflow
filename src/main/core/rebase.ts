@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join } from 'node:path'
+import { parseConflicts, resolveConflicts, type Choice, type Chunk } from './conflicts'
 import { run } from './proc'
 
 export type ConflictFile = { path: string; kind: 'text' | 'deleted-by-main' | 'deleted-by-branch' | 'other' }
@@ -44,10 +45,11 @@ export async function rebaseState(wt: string): Promise<RebaseState> {
   const total = Number(readTrim(join(dir, 'end')) ?? readTrim(join(dir, 'last')))
   const subject = readTrim(join(dir, 'message'))?.split(/\r?\n/)[0]
   const conflicts: ConflictFile[] = []
-  for (const line of (await git(wt, 'status', '--porcelain=v1')).split(/\r?\n/)) {
-    const code = line.slice(0, 2)
+  // -z prints paths raw (no quoting, no octal escapes for accents).
+  for (const entry of (await git(wt, 'status', '--porcelain=v1', '-z')).split('\0')) {
+    const code = entry.slice(0, 2)
     if (!/^(DD|AU|UD|UA|DU|AA|UU)$/.test(code)) continue
-    conflicts.push({ path: line.slice(3).replace(/^"(.*)"$/, '$1'), kind: KINDS[code] ?? 'other' })
+    conflicts.push({ path: entry.slice(3), kind: KINDS[code] ?? 'other' })
   }
   return { inProgress: true, step: step || undefined, total: total || undefined, subject, conflicts }
 }
@@ -89,6 +91,43 @@ export async function resolveFile(wt: string, path: string, content: string | nu
   await git(wt, 'add', '--', path)
 }
 
+// Files are handled as latin1 strings: one char per byte, so any encoding (UTF-8, Latin-1, even
+// stray binary) round-trips byte for byte. Markers are ASCII, so parsing is unaffected.
+function readBytes(wt: string, path: string): string {
+  return readFileSync(join(wt, path)).toString('latin1')
+}
+
+function forDisplay(bytes: string): string {
+  return Buffer.from(bytes, 'latin1').toString('utf8')
+}
+
+/** The conflict blocks of a file, decoded for display. */
+export async function conflictChunks(wt: string, path: string): Promise<Chunk[]> {
+  if (!existsSync(join(wt, path))) return []
+  return parseConflicts(readBytes(wt, path)).map((c) =>
+    c.kind === 'text' ? { kind: 'text', text: forDisplay(c.text) } : { kind: 'conflict', main: forDisplay(c.main), branch: forDisplay(c.branch) }
+  )
+}
+
+export type Resolution = { choices: Choice[]; conflicts: number } | { keep: true } | { remove: true }
+
+/**
+ * Resolves one conflicted file: keep it as it is on disk, remove it, or pick a side per block.
+ * Choices are refused when the file no longer has the blocks they were made on.
+ */
+export async function resolveConflictFile(wt: string, path: string, how: Resolution): Promise<void> {
+  if ('remove' in how) return resolveFile(wt, path, null)
+  if ('keep' in how) {
+    await git(wt, 'add', '--', path)
+    return
+  }
+  const chunks = parseConflicts(readBytes(wt, path))
+  if (chunks.filter((c) => c.kind === 'conflict').length !== how.conflicts)
+    throw new Error('El archivo cambió desde que elegiste (¿lo tocó el agente?); vuelve a elegir.')
+  writeFileSync(join(wt, path), Buffer.from(resolveConflicts(chunks, how.choices), 'latin1'))
+  await git(wt, 'add', '--', path)
+}
+
 export async function continueRebase(wt: string): Promise<{ status: 'conflicts' | 'done' }> {
   for (;;) {
     let failure: unknown
@@ -102,14 +141,20 @@ export async function continueRebase(wt: string): Promise<{ status: 'conflicts' 
     if (state.conflicts.length) return { status: 'conflicts' }
     if (!failure) continue
     // Only a commit the resolution left empty may be dropped; any other failure is the user's to see.
-    let empty = false
-    try {
-      await git(wt, 'diff', '--cached', '--quiet', 'HEAD')
-      empty = true
-    } catch {
-      empty = false
-    }
+    const empty = await git(wt, 'diff', '--cached', '--quiet', 'HEAD').then(
+      () => true,
+      () => false
+    )
     if (!empty) throw failure
+    // --skip resets the working tree: never with edits that were not added.
+    const loose = (await git(wt, 'status', '--porcelain', '--untracked-files=all')).trim()
+    if (loose)
+      throw new Error(
+        `Hay cambios sin agregar en ${loose
+          .split(/\r?\n/)
+          .map((l) => l.slice(3))
+          .join(', ')}; agrégalos (git add) o descártalos antes de continuar.`
+      )
     try {
       await git(wt, 'rebase', '--skip')
     } catch (e) {
