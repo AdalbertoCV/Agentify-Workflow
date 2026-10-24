@@ -28,7 +28,18 @@ test('listMyIssues maps the GraphQL response', async () => {
                 title: 'Something',
                 description: null,
                 url: 'https://linear.app/acme/issue/TCK-1',
-                state: { name: 'In Progress' }
+                state: { name: 'In Progress', type: 'started' },
+                inverseRelations: { nodes: [] }
+              },
+              {
+                identifier: 'TCK-2',
+                title: 'Waits for TCK-1',
+                description: 'x',
+                url: 'https://linear.app/acme/issue/TCK-2',
+                state: { name: 'Backlog', type: 'backlog' },
+                inverseRelations: {
+                  nodes: [{ type: 'blocks', issue: { identifier: 'TCK-1', state: { type: 'started' } } }]
+                }
               }
             ]
           }
@@ -43,9 +54,22 @@ test('listMyIssues maps the GraphQL response', async () => {
       title: 'Something',
       state: 'In Progress',
       description: '',
-      url: 'https://linear.app/acme/issue/TCK-1'
+      url: 'https://linear.app/acme/issue/TCK-1',
+      status: 'in-progress'
+    },
+    {
+      identifier: 'TCK-2',
+      title: 'Waits for TCK-1',
+      state: 'Backlog',
+      description: 'x',
+      url: 'https://linear.app/acme/issue/TCK-2',
+      status: 'blocked',
+      blockedBy: ['TCK-1']
     }
   ])
+  // Linear rejects queries over 10000 complexity: relations must be bounded.
+  const body = JSON.parse((fetchFn.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).query
+  expect(body).toMatch(/inverseRelations\(first: \d+\)/)
   const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit]
   expect((init.headers as Record<string, string>).Authorization).toBe('key')
 })

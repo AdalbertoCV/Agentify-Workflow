@@ -1,6 +1,7 @@
 import type { AppConfig, RepoConfig, TestUser, TicketProviderId } from '../main/core/config'
 import type { Chunk } from '../main/core/conflicts'
 import type { RebaseState, Resolution } from '../main/core/rebase'
+import type { TicketStatus } from '../main/core/ticketStatus'
 import type { DeletePlan, DeleteStep, Session } from '../main/core/sessions'
 
 export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser, TicketProviderId }
@@ -31,6 +32,9 @@ export type Issue = {
   url: string
   /** Config repo the ticket lives in (GitHub Issues). */
   repo?: string
+  status: TicketStatus
+  /** Unfinished tickets this one waits for. */
+  blockedBy?: string[]
 }
 
 export type Check = {
@@ -54,6 +58,7 @@ export type CommitResult = {
 
 export type { Chunk, Choice } from '../main/core/conflicts'
 export type { ConflictFile, RebaseState, Resolution } from '../main/core/rebase'
+export type { TicketStatus } from '../main/core/ticketStatus'
 export type RebaseStart = { repo: string; trunk: string; status: string; replayed?: number; error?: string }
 
 export type OnboardStart = { repoName: string; repoPath: string; workDir: string; terminalId: string }

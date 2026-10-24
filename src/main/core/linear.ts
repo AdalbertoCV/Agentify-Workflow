@@ -1,3 +1,5 @@
+import { linearStatus, type TicketStatus } from './ticketStatus'
+
 export type Issue = {
   identifier: string
   title: string
@@ -6,6 +8,9 @@ export type Issue = {
   url: string
   /** Config repo the ticket lives in (GitHub Issues). */
   repo?: string
+  status: TicketStatus
+  /** Unfinished tickets this one waits for. */
+  blockedBy?: string[]
 }
 
 const ENDPOINT = 'https://api.linear.app/graphql'
@@ -35,7 +40,10 @@ export async function listMyIssues(key: string, fetchFn: typeof fetch = fetch): 
         orderBy: updatedAt
         filter: { state: { type: { nin: ["completed", "canceled"] } } }
       ) {
-        nodes { identifier title description url state { name } }
+        nodes {
+          identifier title description url state { name type }
+          inverseRelations(first: 10) { nodes { type issue { identifier state { type } } } }
+        }
       }
     }
   }`
@@ -44,7 +52,8 @@ export async function listMyIssues(key: string, fetchFn: typeof fetch = fetch): 
     title: string
     description: string | null
     url: string
-    state: { name: string }
+    state: { name: string; type: string }
+    inverseRelations: { nodes: { type: string; issue: { identifier: string; state: { type: string } } }[] }
   }
   const data = await gql<{ viewer: { assignedIssues: { nodes: Node[] } } }>(key, query, fetchFn)
   return data.viewer.assignedIssues.nodes.map((n) => ({
@@ -52,7 +61,8 @@ export async function listMyIssues(key: string, fetchFn: typeof fetch = fetch): 
     title: n.title,
     state: n.state.name,
     description: n.description ?? '',
-    url: n.url
+    url: n.url,
+    ...linearStatus(n.state, n.inverseRelations.nodes)
   }))
 }
 

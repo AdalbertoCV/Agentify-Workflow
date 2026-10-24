@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AppConfig, Issue, Session, TicketProviderId } from '../../../shared/api'
+import type { AppConfig, Issue, Session, TicketProviderId, TicketStatus } from '../../../shared/api'
 import { api, errorText } from '../api'
+
+// Why a ticket cannot start a session; ready tickets have none.
+const WHY_NOT: Record<TicketStatus, string | null> = {
+  ready: null,
+  'in-progress': 'En progreso: ya se está trabajando',
+  'in-review': 'En revisión',
+  blocked: 'Bloqueado'
+}
 
 const PROVIDER_LABEL: Record<TicketProviderId, string> = {
   linear: 'Linear',
@@ -52,9 +60,14 @@ export function NewSessionDialog({
     progressEl.current?.scrollTo(0, progressEl.current.scrollHeight)
   }, [progress])
 
+  // Tickets you can start first; the rest stay visible so you see why they are not offered.
   const filtered = useMemo(() => {
     const q = query.toLowerCase()
-    return issues.filter((i) => !q || i.identifier.toLowerCase().includes(q) || i.title.toLowerCase().includes(q))
+    return issues
+      .filter(
+        (i) => !q || i.identifier.toLowerCase().includes(q) || i.title.toLowerCase().includes(q)
+      )
+      .sort((a, b) => Number(b.status === 'ready') - Number(a.status === 'ready'))
   }, [issues, query])
 
   const pick = async (i: Issue): Promise<void> => {
@@ -99,20 +112,43 @@ export function NewSessionDialog({
         {provider && provider !== 'manual' && !issuesError && (
           <div className="field">
             <label>Tus tickets</label>
-            <input placeholder="Buscar por número o título" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
+            <input
+              placeholder="Buscar por número o título"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoFocus
+            />
             <div className="issues">
               {!issues.length && (
                 <div className="muted" style={{ padding: 10 }}>
                   {loaded ? 'No tienes tickets abiertos asignados.' : 'Cargando…'}
                 </div>
               )}
-              {filtered.map((i) => (
-                <div key={i.identifier} className={`issue ${picked === i.identifier ? 'on' : ''}`} onClick={() => pick(i)}>
-                  <span className="id">{i.identifier}</span>
-                  <span style={{ flex: 1 }}>{i.title}</span>
-                  <span className="muted">{i.state}</span>
-                </div>
-              ))}
+              {filtered.map((i) => {
+                const why = WHY_NOT[i.status]
+                return (
+                  <div
+                    key={i.identifier}
+                    className={`issue status-${i.status} ${why ? 'disabled' : ''} ${picked === i.identifier ? 'on' : ''}`}
+                    title={why ? `No se puede elegir: ${why.toLowerCase()}` : undefined}
+                    onClick={() => !why && pick(i)}
+                  >
+                    <span className="status-dot" />
+                    <span className="id">{i.identifier}</span>
+                    <span className="issue-text">
+                      <span>{i.title}</span>
+                      {why && (
+                        <span className="issue-why">
+                          {i.status === 'blocked' && i.blockedBy?.length
+                            ? `Bloqueado por ${i.blockedBy.join(', ')}`
+                            : why}
+                        </span>
+                      )}
+                    </span>
+                    <span className="issue-state">{i.state}</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -120,7 +156,11 @@ export function NewSessionDialog({
         <div className="row">
           <div className="field" style={{ width: 160 }}>
             <label>Ticket</label>
-            <input value={ticket} placeholder="ENG-123" onChange={(e) => setTicket(e.target.value)} />
+            <input
+              value={ticket}
+              placeholder="ENG-123"
+              onChange={(e) => setTicket(e.target.value)}
+            />
           </div>
           <div className="field" style={{ flex: 1 }}>
             <label>Título</label>
@@ -132,7 +172,11 @@ export function NewSessionDialog({
           <label>Repos que toca {picked && repos.length ? '(leídos del ticket)' : ''}</label>
           <div className="checks">
             {cfg.repos.map((r) => (
-              <div key={r.name} className={`check ${repos.includes(r.name) ? 'on' : ''}`} onClick={() => toggle(r.name)}>
+              <div
+                key={r.name}
+                className={`check ${repos.includes(r.name) ? 'on' : ''}`}
+                onClick={() => toggle(r.name)}
+              >
                 <input type="checkbox" readOnly checked={repos.includes(r.name)} />
                 <span>{r.name}</span>
               </div>
@@ -162,7 +206,11 @@ export function NewSessionDialog({
           <button disabled={busy} onClick={onClose}>
             Cancelar
           </button>
-          <button className="primary" disabled={busy || !ticket.trim() || !repos.length} onClick={create}>
+          <button
+            className="primary"
+            disabled={busy || !ticket.trim() || !repos.length}
+            onClick={create}
+          >
             {busy ? 'Creando…' : 'Crear sesión'}
           </button>
         </div>

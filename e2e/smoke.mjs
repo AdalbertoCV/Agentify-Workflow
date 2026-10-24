@@ -60,11 +60,39 @@ writeFileSync(
 const userData = mkdtempSync(join(tmpdir(), 'agentify-ud-'))
 writeFileSync(join(userData, 'settings.json'), JSON.stringify({ root }))
 
+// A stand-in gh: logged in, and four open issues in org/issues, one of each status.
+const fakeBin = join(root, 'fake-bin')
+mkdirSync(fakeBin)
+const issue = (number, title, labels = [], blockedBy = []) => ({
+  number,
+  title,
+  body: '',
+  url: `https://github.com/org/issues/issues/${number}`,
+  labels: { nodes: labels.map((name) => ({ name })) },
+  blockedBy: { nodes: blockedBy.map((n) => ({ number: n, state: 'OPEN', repository: { nameWithOwner: 'org/issues' } })) }
+})
+const fakeIssues = [
+  issue(4, 'Bloqueado por otro', [], [1]),
+  issue(3, 'Ya en revisión', ['in review']),
+  issue(2, 'Alguien lo trabaja', ['in progress']),
+  issue(1, 'Listo para empezar')
+]
+writeFileSync(
+  join(fakeBin, 'gh-fake.cjs'),
+  `const a = process.argv.slice(2)
+if (a[0] === 'auth') { console.error('Logged in to github.com account e2e\\n  - Active account: true'); process.exit(0) }
+if (a[0] === 'api' && a[1] === 'user') { console.log('e2e'); process.exit(0) }
+if (a[0] === 'api' && a[1] === 'graphql') { console.log(JSON.stringify({ data: { repository: { issues: { nodes: ${JSON.stringify(fakeIssues)} } } } })); process.exit(0) }
+console.error('gh falso: ' + a.join(' ')); process.exit(1)
+`
+)
+writeFileSync(join(fakeBin, 'gh.cmd'), `@node "%~dp0gh-fake.cjs" %*\r\n`)
+
 // AGENTIFY_EXE=dist/win-unpacked/agentify.exe runs the same flow against the packaged app.
 const app = await electron.launch({
   ...(process.env.AGENTIFY_EXE ? { executablePath: resolve(process.env.AGENTIFY_EXE), args: [] } : { args: ['.'] }),
   cwd: resolve('.'),
-  env: { ...process.env, AGENTIFY_USER_DATA: userData }
+  env: { ...process.env, AGENTIFY_USER_DATA: userData, PATH: `${fakeBin};${process.env.PATH}` }
 })
 const page = await app.firstWindow()
 const step = async (name) => {
@@ -210,6 +238,23 @@ try {
   await step('10b-conectores-github')
   const saved = JSON.parse(readFileSync(join(root, 'agentify.config.json'), 'utf8')).tickets
   if (saved?.provider !== 'github' || saved.githubRepos?.[0] !== 'org/issues') throw new Error(`tickets no guardado: ${JSON.stringify(saved)}`)
+
+  // Picking a ticket: only the ready one can start a session, and the blocked one says by which.
+  await page.getByRole('button', { name: 'Sesiones' }).click()
+  await page.getByRole('button', { name: '+ Nueva sesión' }).click()
+  await page.locator('.issue').nth(3).waitFor({ timeout: 30000 })
+  const rows = await page.locator('.issue').evaluateAll((els) => els.map((e) => [e.className, e.textContent]))
+  if (!rows[0][0].includes('status-ready') || rows[0][0].includes('disabled')) throw new Error(`el elegible no va primero: ${rows[0]}`)
+  if (rows.slice(1).some(([cls]) => !cls.includes('disabled'))) throw new Error('hay un ticket no elegible que se puede elegir')
+  const blocked = rows.find(([cls]) => cls.includes('status-blocked'))
+  if (!blocked?.[1].includes('Bloqueado por org/issues#1')) throw new Error(`no dice por cuál está bloqueado: ${blocked}`)
+  await page.locator('.issue.status-blocked').click()
+  if (await page.getByPlaceholder('ENG-123').inputValue()) throw new Error('un ticket bloqueado se pudo elegir')
+  await page.locator('.issue.status-ready').click()
+  if ((await page.getByPlaceholder('ENG-123').inputValue()) !== 'org/issues#1') throw new Error('el ticket listo no se eligió')
+  await step('10b2-tickets-por-estado')
+  await page.locator('.modal').getByRole('button', { name: 'Cancelar' }).click()
+  await page.getByRole('button', { name: 'Conectores' }).click()
   await page.locator('.seg').getByRole('button', { name: 'Manual' }).click()
   await page.getByText('Escribes el ticket').waitFor()
   await step('10c-conectores-manual')

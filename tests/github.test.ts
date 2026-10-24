@@ -38,31 +38,70 @@ test('ticket ids: config repos by name, extra repos with their owner', () => {
   expect(githubTicketId('org/issues', 45)).toBe('org/issues#45')
 })
 
-test('listGithubIssues asks gh for my open issues of each repo', async () => {
+/** A fake gh: `api user` gives the login, `api graphql` answers per repo with `issues(slug)`. */
+function fakeGh(issues: (slug: string) => unknown[], calls: string[][] = []): (args: string[]) => Promise<string> {
+  return async (args) => {
+    calls.push(args)
+    if (args[1] === 'user') return 'me\n'
+    const field = (k: string): string => args.find((a) => a.startsWith(`${k}=`))!.slice(k.length + 1)
+    const slug = `${field('owner')}/${field('name')}`
+    return JSON.stringify({ data: { repository: { issues: { nodes: issues(slug) } } } })
+  }
+}
+
+const node = (slug: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+  number: 7,
+  title: `t-${slug}`,
+  body: 'x',
+  url: `https://github.com/${slug}/issues/7`,
+  labels: { nodes: [] },
+  blockedBy: { nodes: [] },
+  ...extra
+})
+
+test('listGithubIssues asks GitHub for my open issues of each repo', async () => {
   const cfg = cfgWith({ api: 'https://github.com/org/api.git' }, ['org/issues'])
   const calls: string[][] = []
-  const gh = async (args: string[]): Promise<string> => {
-    calls.push(args)
-    const slug = args[args.indexOf('-R') + 1]
-    return JSON.stringify([
-      { number: 7, title: `t-${slug}`, body: 'x', url: `https://github.com/${slug}/issues/7`, state: 'OPEN' }
+  const issues = await listGithubIssues(cfg, fakeGh((slug) => [node(slug)], calls))
+  const query = calls.find((c) => c[1] === 'graphql')!
+  expect(query).toEqual(expect.arrayContaining(['-F', 'owner=org', '-F', 'name=api', '-F', 'login=me']))
+  expect(query.find((a) => a.startsWith('query='))).toMatch(/states: OPEN/)
+  expect(query.find((a) => a.startsWith('query='))).not.toContain(String.fromCharCode(10))
+  expect(issues.map((i) => [i.identifier, i.title, i.repo, i.status])).toEqual([
+    ['api#7', 't-org/api', 'api', 'ready'],
+    ['org/issues#7', 't-org/issues', undefined, 'ready']
+  ])
+})
+
+test('an issue blocked by an open issue says which one; labels give progress and review', async () => {
+  const cfg = cfgWith({ api: 'https://github.com/org/api.git' })
+  const issues = await listGithubIssues(
+    cfg,
+    fakeGh(() => [
+      node('org/api', {
+        number: 1,
+        blockedBy: { nodes: [{ number: 3, state: 'OPEN', repository: { nameWithOwner: 'org/api' } }] }
+      }),
+      node('org/api', {
+        number: 2,
+        blockedBy: { nodes: [{ number: 4, state: 'CLOSED', repository: { nameWithOwner: 'org/api' } }] }
+      }),
+      node('org/api', { number: 5, labels: { nodes: [{ name: 'in review' }] } })
     ])
-  }
-  const issues = await listGithubIssues(cfg, gh)
-  expect(calls[0]).toEqual(
-    expect.arrayContaining(['issue', 'list', '-R', 'org/api', '--assignee', '@me', '--state', 'open'])
   )
-  expect(issues.map((i) => [i.identifier, i.title, i.repo])).toEqual([
-    ['api#7', 't-org/api', 'api'],
-    ['org/issues#7', 't-org/issues', undefined]
+  expect(issues.map((i) => [i.identifier, i.status, i.blockedBy])).toEqual([
+    ['api#1', 'blocked', ['org/api#3']],
+    ['api#2', 'ready', undefined],
+    ['api#5', 'in-review', undefined]
   ])
 })
 
 test('listGithubIssues skips a failing repo when others answer, fails when none do', async () => {
   const cfg = cfgWith({ api: 'https://github.com/org/api.git' }, ['org/gone'])
+  const ok = fakeGh(() => [])
   const gh = async (args: string[]): Promise<string> => {
-    if (args.includes('org/gone')) throw new Error('repo not found')
-    return '[]'
+    if (args.includes('name=gone')) throw new Error('repo not found')
+    return ok(args)
   }
   expect(await listGithubIssues(cfg, gh)).toEqual([])
   await expect(listGithubIssues(cfg, async () => Promise.reject(new Error('gh: not logged in')))).rejects.toThrow(
@@ -72,7 +111,7 @@ test('listGithubIssues skips a failing repo when others answer, fails when none 
 
 test('suggested repos: the Repos line first, else the repo the issue lives in', () => {
   const known = ['api', 'web']
-  const base = { identifier: 'api#1', title: '', state: '', url: '' }
+  const base = { identifier: 'api#1', title: '', state: '', url: '', status: 'ready' as const }
   expect(githubReposFor({ ...base, description: '**Repos:** web', repo: 'api' }, known)).toEqual(['web'])
   expect(githubReposFor({ ...base, description: '', repo: 'api' }, known)).toEqual(['api'])
   expect(githubReposFor({ ...base, description: '' }, known)).toEqual([])
