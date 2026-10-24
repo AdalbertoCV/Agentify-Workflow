@@ -75,8 +75,10 @@ const step = async (name) => {
 
 try {
   await page.getByRole('button', { name: '+ Nueva sesión' }).waitFor()
-  const head = git(resolve('.'), 'rev-parse', '--short', 'HEAD')
-  await page.getByText(`· ${head}`).waitFor({ timeout: 10000 })
+  // From source the bar shows the commit; an installed app has no checkout, only the version.
+  const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
+  const build = process.env.AGENTIFY_EXE ? `v${version}` : `· ${git(resolve('.'), 'rev-parse', '--short', 'HEAD')}`
+  await page.getByText(build).waitFor({ timeout: 10000 })
   await step('01-tablero-vacio')
 
   await page.getByRole('button', { name: '+ Nueva sesión' }).click()
