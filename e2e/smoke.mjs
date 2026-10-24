@@ -11,7 +11,7 @@ mkdirSync(shots, { recursive: true })
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
 const root = mkdtempSync(join(tmpdir(), 'agentify-e2e-'))
-for (const name of ['api', 'web']) {
+for (const name of ['api', 'web', 'jobs']) {
   const seed = join(root, `${name}-seed`)
   mkdirSync(seed)
   git(seed, 'init', '-q', '-b', 'main')
@@ -26,10 +26,10 @@ for (const name of ['api', 'web']) {
   git(root, 'clone', '-q', join(root, `${name}.git`), join(root, name))
 }
 mkdirSync(join(root, 'scripts'))
-writeFileSync(
-  join(root, 'scripts', 'api.sh'),
-  `node -e "require('http').createServer((q,s)=>{s.setHeader('access-control-allow-origin','*');s.end(JSON.stringify({ok:true,port:process.env.AGENTIFY_PORT}))}).listen(process.env.AGENTIFY_PORT,'127.0.0.1')"\n`
-)
+// The backends run a small JSON API with token login (e2e/fixtures/api-server.cjs).
+const apiServer = `node "${resolve('e2e/fixtures/api-server.cjs').replace(/\\/g, '/')}"\n`
+writeFileSync(join(root, 'scripts', 'api.sh'), apiServer)
+writeFileSync(join(root, 'scripts', 'jobs.sh'), apiServer)
 writeFileSync(
   join(root, 'scripts', 'web.sh'),
   `node -e "require('http').createServer((q,s)=>{s.setHeader('content-type','text/html');s.end('<h1 style=font-family:sans-serif>Hola desde '+process.env.AGENTIFY_SESSION+'</h1><p id=api>…</p><form><input id=email type=email placeholder=email><input id=pw type=password></form><script>fetch(\\'http://127.0.0.1:'+process.env.AGENTIFY_PORT_API+'/\\').then(r=>r.json()).then(j=>document.getElementById(\\'api\\').textContent=\\'API en puerto \\'+j.port)</script>')}).listen(process.env.AGENTIFY_PORT,'127.0.0.1')"\n`
@@ -45,6 +45,8 @@ writeFileSync(
       agents: [{ id: 'shell', label: 'Shell', command: 'cmd', args: [], resumeArgs: [], waiting: 'idle' }],
       repos: [
         { name: 'api', path: 'api', trunk: 'main', run: { script: 'scripts/api.sh', port: true } },
+        // Neither in the session nor needed by it: brought up from the API tab.
+        { name: 'jobs', path: 'jobs', trunk: 'main', run: { script: 'scripts/jobs.sh', port: true } },
         {
           name: 'web',
           path: 'web',
@@ -137,6 +139,43 @@ try {
   await step('04b-navegador-pantalla-completa')
   await page.keyboard.press('Escape')
   await page.locator('.pane.browser-full').waitFor({ state: 'detached', timeout: 5000 })
+
+  // API tab: the catalog the agent would write (written here), login with a test user, a call.
+  writeFileSync(
+    join(root, '.worktrees', 'e2e-1', 'api-api.json'),
+    JSON.stringify({
+      auth: {
+        login: { method: 'POST', path: '/api/login/', body: { email: '{email}', password: '{password}' } },
+        tokenPath: 'access',
+        prefix: 'Bearer '
+      },
+      endpoints: [
+        { method: 'GET', path: '/api/items/', summary: 'Lista los items' },
+        { method: 'POST', path: '/api/items/', summary: 'Crea un item', body: { name: 'Desde la pestaña API' } }
+      ]
+    })
+  )
+  await page.locator('.top-tabs').getByRole('button', { name: 'API' }).click()
+  await page.locator('.api-endpoint').nth(1).waitFor({ timeout: 15000 })
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click()
+  await page.getByRole('button', { name: '✓ Con sesión' }).waitFor({ timeout: 15000 })
+  await page.locator('.api-endpoint', { hasText: 'Crea un item' }).click()
+  if (!(await page.locator('.api-body').inputValue()).includes('Desde la pestaña API')) throw new Error('el body no se llenó')
+  await page.getByRole('button', { name: 'Enviar' }).click()
+  await page.locator('.api-status .code', { hasText: '201' }).waitFor({ timeout: 15000 })
+  if (!(await page.locator('.api-response pre').innerText()).includes('"id": 2')) throw new Error('la respuesta no trae el item creado')
+  await step('04c-api-crear-item')
+
+  // jobs is not in the session nor needed by it: it comes up from the API tab, on its own port.
+  await page.locator('.api-bar select').first().selectOption('jobs')
+  await page.getByText('jobs no está corriendo en esta sesión').waitFor({ timeout: 10000 })
+  await page.getByRole('button', { name: '▶ Levantar jobs' }).click()
+  await page.locator('.api-down').waitFor({ state: 'detached', timeout: 90000 })
+  await page.locator('.api-url input').fill('/health')
+  await page.getByRole('button', { name: 'Enviar' }).click()
+  await page.locator('.api-status .code', { hasText: '200' }).waitFor({ timeout: 15000 })
+  await step('04d-api-levantar-otro-repo')
+  await page.locator('.top-tabs').getByRole('button', { name: 'Navegador' }).click()
 
   await page.getByText('⛶ Completa').click()
   await page.getByText('Copiado al portapapeles').waitFor({ timeout: 10000 })

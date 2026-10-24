@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { AppConfig, RebaseStart, SessionInfo } from '../../../shared/api'
 import { api, errorText } from '../api'
 import { AgentTerminal } from '../components/AgentTerminal'
+import { ApiPane } from '../components/ApiPane'
 import { BrowserPane } from '../components/BrowserPane'
 import { useDelete } from '../components/ConfirmDelete'
 import { DiffPane } from '../components/DiffPane'
@@ -24,6 +25,9 @@ export function SessionView({
   })
   const running = session.test === 'running' || session.test === 'starting'
   const [updating, setUpdating] = useState(false)
+  // A session with no front (no repo opens a URL) starts on the API tab.
+  const hasFront = session.repos.some((r) => cfg.repos.find((x) => x.name === r.name)?.run?.url)
+  const [top, setTop] = useState<'browser' | 'api'>(hasFront ? 'browser' : 'api')
   const [updates, setUpdates] = useState<RebaseStart[] | null>(null)
   const trunks = [
     ...new Set(session.repos.map((r) => cfg.repos.find((x) => x.name === r.name)?.trunk ?? 'main'))
@@ -152,7 +156,23 @@ export function SessionView({
           </div>
         </div>
         <div className="right">
-          <BrowserPane session={session} testUsers={cfg.testUsers} />
+          <div className="top-area">
+            <div className="top-tabs">
+              <button className={top === 'browser' ? 'on' : ''} onClick={() => setTop('browser')}>
+                Navegador
+              </button>
+              <button className={top === 'api' ? 'on' : ''} onClick={() => setTop('api')}>
+                API
+              </button>
+            </div>
+            {/* Both stay mounted: switching tabs never reloads the page or loses a request. */}
+            <div className={`top-slot ${top === 'browser' ? '' : 'hidden'}`}>
+              <BrowserPane session={session} testUsers={cfg.testUsers} />
+            </div>
+            <div className={`top-slot ${top === 'api' ? '' : 'hidden'}`}>
+              <ApiPane cfg={cfg} session={session} />
+            </div>
+          </div>
           <DiffPane session={session} />
         </div>
       </div>

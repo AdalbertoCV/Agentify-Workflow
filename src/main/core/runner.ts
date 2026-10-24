@@ -25,9 +25,11 @@ type Run = {
   ports: Record<string, number>
 }
 
+/** Repos to run, needs first: the session's, plus `extra` ones brought up on demand (from trunk). */
 export function resolveStack(
   cfg: AppConfig,
-  session: Session
+  session: Session,
+  extra: string[] = []
 ): { repo: RepoConfig; fromSession: boolean }[] {
   const inSession = new Set(session.repos.map((r) => r.name))
   const ordered: RepoConfig[] = []
@@ -42,6 +44,7 @@ export function resolveStack(
     ordered.push(repo)
   }
   for (const r of session.repos) visit(r.name)
+  for (const name of extra) visit(name)
   return ordered.map((repo) => ({ repo, fromSession: inSession.has(repo.name) }))
 }
 
@@ -97,7 +100,8 @@ export class Runner {
   async start(
     cfg: AppConfig,
     session: Session,
-    onLog: (repo: string, line: string) => void
+    onLog: (repo: string, line: string) => void,
+    extra: string[] = []
   ): Promise<{ url?: string }> {
     if (this.status(session.id) === 'running' || this.status(session.id) === 'starting')
       return { url: this.url(session.id) }
@@ -115,104 +119,15 @@ export class Runner {
       onLog(repo, line)
     }
     try {
-      const stack = resolveStack(cfg, session)
+      const stack = resolveStack(cfg, session, extra)
       if (!stack.length)
         throw new Error('Ningún repo de esta sesión tiene script de arranque. Agrégalo en Repos.')
       const ports = await allocatePorts(cfg, session.id, new Set())
       current.ports = ports
-      const portEnv = Object.fromEntries(
-        Object.entries(ports).map(([k, v]) => [envName(k), String(v)])
-      )
       const bash = await gitBash()
 
-      for (const { repo, fromSession } of stack) {
-        const own = session.repos.find((r) => r.name === repo.name)
-        const cwd = fromSession
-          ? own!.worktree
-          : await ensureTrunkWorktree(cfg, repo, !this.trunkInUse(repo.name), (m) =>
-              log(repo.name, m)
-            )
-        await relinkEmptyDirs(cfg, repo, cwd, (m) => log(repo.name, m))
-        for (const d of repo.linkDirs) {
-          const p = join(cwd, d)
-          if (!existsSync(p) || readdirSync(p).every((n) => n.startsWith('.')))
-            throw new Error(
-              `${repo.name}: ${d} está vacío (comparte el de ${linkSource(cfg, repo)}). Instálalo ahí (por ejemplo npm install) y vuelve a Probar.`
-            )
-        }
-        const env: Record<string, string> = {
-          ...portEnv,
-          AGENTIFY_SESSION: session.id,
-          AGENTIFY_ROOT: cfg.root,
-          PYTHONUTF8: '1'
-        }
-        if (ports[repo.name]) env.AGENTIFY_PORT = String(ports[repo.name])
-        if (repo.db) {
-          const dbName = own?.db ?? (await this.ensureSessionDb(cfg, session, repo, cwd, log))
-          // The branch may have gained migrations since the session db was last migrated.
-          if (own?.db) {
-            const fp = await migrationsFingerprint(repo, cwd)
-            if (!fp || fp !== migratedFingerprint(sessionDir(cfg, session.id), repo.name)) {
-              await this.migrate(cfg, repo, cwd, dbName, log)
-              if (fp) markMigrated(sessionDir(cfg, session.id), repo.name, fp)
-            }
-          }
-          env.AGENTIFY_DB_NAME = dbName
-          env[repo.db.nameKey] = dbName
-        }
-        const script = isAbsolute(repo.run!.script)
-          ? repo.run!.script
-          : join(cfg.root, repo.run!.script)
-        if (!existsSync(script)) throw new Error(`${repo.name}: no existe el script ${script}`)
-        log(
-          repo.name,
-          `▶ ${fromSession ? 'rama de la sesión' : `main fresco (${repo.trunk})`} · puerto ${ports[repo.name] ?? '—'}`
-        )
-        const child = spawn(bash, ['-lc', `"${script.replace(/\\/g, '/')}"`], {
-          cwd,
-          env: { ...childEnv(), ...env },
-          windowsHide: true,
-          detached: process.platform !== 'win32'
-        })
-        const proc: Proc = { repo, child, cwd, env }
-        current.procs.push(proc)
-        let tail: string[] = []
-        const onChunk = (d: Buffer): void => {
-          for (const line of d.toString().split(/\r?\n/)) {
-            if (!line) continue
-            tail = [...tail, line].slice(-30)
-            log(repo.name, line)
-          }
-        }
-        child.stdout?.on('data', onChunk)
-        child.stderr?.on('data', onChunk)
-        let exited: number | null | undefined
-        child.on('exit', (code) => {
-          exited = code
-          if (current.status === 'running') {
-            current.status = 'error'
-            log(repo.name, `■ terminó con código ${code}`)
-          }
-        })
-        if (repo.run!.port) {
-          const port = ports[repo.name]
-          const deadline = Date.now() + READY_TIMEOUT_MS
-          while (!(await portAnswers(port))) {
-            if (exited !== undefined)
-              throw new Error(`${repo.name} terminó (código ${exited}):\n${tail.join('\n')}`)
-            if (Date.now() > deadline)
-              throw new Error(
-                `${repo.name} no abrió el puerto ${port} en 3 min:\n${tail.join('\n')}`
-              )
-            await new Promise((r) => setTimeout(r, 500))
-          }
-          log(repo.name, `✓ escuchando en ${port}`)
-        } else {
-          await new Promise((r) => setTimeout(r, 1500))
-          if (exited !== undefined && exited !== 0)
-            throw new Error(`${repo.name} terminó (código ${exited}):\n${tail.join('\n')}`)
-        }
-      }
+      for (const { repo, fromSession } of stack)
+        await this.launch(cfg, session, current, repo, fromSession, bash, log)
 
       const browserRepo =
         stack.find((s) => s.repo.name === cfg.browserRepo && s.repo.run?.url) ??
@@ -230,6 +145,153 @@ export class Runner {
       log('agentify', `✗ ${(e as Error).message}`)
       throw e
     }
+  }
+
+  /** Starts one repo of the stack and waits until it listens (or fails). */
+  private async launch(
+    cfg: AppConfig,
+    session: Session,
+    current: Run,
+    repo: RepoConfig,
+    fromSession: boolean,
+    bash: string,
+    log: (repo: string, line: string) => void
+  ): Promise<void> {
+    const ports = current.ports
+    const portEnv = Object.fromEntries(
+      Object.entries(ports).map(([k, v]) => [envName(k), String(v)])
+    )
+    const own = session.repos.find((r) => r.name === repo.name)
+    const cwd = fromSession
+      ? own!.worktree
+      : await ensureTrunkWorktree(cfg, repo, !this.trunkInUse(repo.name), (m) => log(repo.name, m))
+    await relinkEmptyDirs(cfg, repo, cwd, (m) => log(repo.name, m))
+    for (const d of repo.linkDirs) {
+      const p = join(cwd, d)
+      if (!existsSync(p) || readdirSync(p).every((n) => n.startsWith('.')))
+        throw new Error(
+          `${repo.name}: ${d} está vacío (comparte el de ${linkSource(cfg, repo)}). Instálalo ahí (por ejemplo npm install) y vuelve a Probar.`
+        )
+    }
+    const env: Record<string, string> = {
+      ...portEnv,
+      AGENTIFY_SESSION: session.id,
+      AGENTIFY_ROOT: cfg.root,
+      PYTHONUTF8: '1'
+    }
+    if (ports[repo.name]) env.AGENTIFY_PORT = String(ports[repo.name])
+    if (repo.db) {
+      const dbName = own?.db ?? (await this.ensureSessionDb(cfg, session, repo, cwd, log))
+      // The branch may have gained migrations since the session db was last migrated.
+      if (own?.db) {
+        const fp = await migrationsFingerprint(repo, cwd)
+        if (!fp || fp !== migratedFingerprint(sessionDir(cfg, session.id), repo.name)) {
+          await this.migrate(cfg, repo, cwd, dbName, log)
+          if (fp) markMigrated(sessionDir(cfg, session.id), repo.name, fp)
+        }
+      }
+      env.AGENTIFY_DB_NAME = dbName
+      env[repo.db.nameKey] = dbName
+    }
+    const script = isAbsolute(repo.run!.script)
+      ? repo.run!.script
+      : join(cfg.root, repo.run!.script)
+    if (!existsSync(script)) throw new Error(`${repo.name}: no existe el script ${script}`)
+    log(
+      repo.name,
+      `▶ ${fromSession ? 'rama de la sesión' : `main fresco (${repo.trunk})`} · puerto ${ports[repo.name] ?? '—'}`
+    )
+    const child = spawn(bash, ['-lc', `"${script.replace(/\\/g, '/')}"`], {
+      cwd,
+      env: { ...childEnv(), ...env },
+      windowsHide: true,
+      detached: process.platform !== 'win32'
+    })
+    const proc: Proc = { repo, child, cwd, env }
+    current.procs.push(proc)
+    let tail: string[] = []
+    const onChunk = (d: Buffer): void => {
+      for (const line of d.toString().split(/\r?\n/)) {
+        if (!line) continue
+        tail = [...tail, line].slice(-30)
+        log(repo.name, line)
+      }
+    }
+    child.stdout?.on('data', onChunk)
+    child.stderr?.on('data', onChunk)
+    let exited: number | null | undefined
+    child.on('exit', (code) => {
+      exited = code
+      if (current.status === 'running') {
+        current.status = 'error'
+        log(repo.name, `■ terminó con código ${code}`)
+      }
+    })
+    if (repo.run!.port) {
+      const port = ports[repo.name]
+      const deadline = Date.now() + READY_TIMEOUT_MS
+      while (!(await portAnswers(port))) {
+        if (exited !== undefined)
+          throw new Error(`${repo.name} terminó (código ${exited}):\n${tail.join('\n')}`)
+        if (Date.now() > deadline)
+          throw new Error(`${repo.name} no abrió el puerto ${port} en 3 min:\n${tail.join('\n')}`)
+        await new Promise((r) => setTimeout(r, 500))
+      }
+      log(repo.name, `✓ escuchando en ${port}`)
+    } else {
+      await new Promise((r) => setTimeout(r, 1500))
+      if (exited !== undefined && exited !== 0)
+        throw new Error(`${repo.name} terminó (código ${exited}):\n${tail.join('\n')}`)
+    }
+  }
+
+  /**
+   * Brings up one more repo of the project (and what it needs) in the session, from trunk when it is
+   * not one of the session's. A stopped session starts with it.
+   */
+  async startRepo(
+    cfg: AppConfig,
+    session: Session,
+    name: string,
+    onLog: (repo: string, line: string) => void
+  ): Promise<{ url?: string }> {
+    const current = this.runs.get(session.id)
+    if (current?.status !== 'running') return this.start(cfg, session, onLog, [name])
+    const log = (repo: string, line: string): void => {
+      appendFileSync(
+        current.logFile,
+        `[${repo}] ${line}
+`
+      )
+      onLog(repo, line)
+    }
+    const up = new Set(this.runningRepos(session.id))
+    const before = current.procs.length
+    try {
+      const bash = await gitBash()
+      for (const { repo, fromSession } of resolveStack(cfg, session, [name]))
+        if (!up.has(repo.name))
+          await this.launch(cfg, session, current, repo, fromSession, bash, log)
+    } catch (e) {
+      // Only what this call started goes down; the rest of the session keeps running.
+      const added = current.procs.splice(before)
+      for (const p of added.reverse()) await killTree(p.child.pid)
+      for (const p of added)
+        for (const pid of await listenersOn(current.ports[p.repo.name])) await killTree(pid)
+      log('agentify', `✗ ${(e as Error).message}`)
+      throw e
+    }
+    const repo = cfg.repos.find((r) => r.name === name)
+    if (!current.url && repo?.run?.url)
+      current.url = repo.run.url.replace('{port}', String(current.ports[name]))
+    return { url: current.url }
+  }
+
+  /** Repos of the session's stack that are up now. */
+  runningRepos(id: string): string[] {
+    const r = this.runs.get(id)
+    if (!r || r.status === 'stopped' || r.status === 'error') return []
+    return [...new Set(r.procs.map((p) => p.repo.name))]
   }
 
   /** A session without its own copy of a db repo still gets its own db (from trunk). */

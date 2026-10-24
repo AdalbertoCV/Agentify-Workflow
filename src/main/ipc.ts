@@ -36,6 +36,7 @@ import { createSession, planDelete, repoConfig as repoConfigOf, runDelete, sessi
 import { readSessions, updateSession, type Session } from './core/store'
 import { providerFor, ticketPrompt } from './core/tickets'
 import { buildInfo, newerOnDisk, type BuildInfo } from './core/buildInfo'
+import { apiFillPrompt, catalogFile, curlFor, login, readCatalog, sendRequest, type ApiRequest } from './core/apiTesting'
 import { PtyManager } from './pty'
 import { getSecret, setSecret } from './secrets'
 import type { SessionInfo, DeleteProgress } from '../shared/api'
@@ -261,6 +262,15 @@ export function registerIpc(): void {
     broadcast('sessions:changed')
     return r
   })
+  // Another repo of the folder, brought up in this session when a test needs it.
+  ipcMain.handle('test:start-repo', async (_e, id: string, name: string) => {
+    const r = await runner.startRepo(requireCfg(), findSession(id), name, (repo, line) =>
+      broadcast('test:log', id, `[${repo}] ${line}`)
+    )
+    broadcast('sessions:changed')
+    return r
+  })
+  ipcMain.handle('test:running-repos', (_e, id: string) => runner.runningRepos(id))
   ipcMain.handle('test:stop', async (_e, id: string) => {
     await runner.stop(id)
     broadcast('sessions:changed')
@@ -384,6 +394,50 @@ export function registerIpc(): void {
     })
     return id
   })
+
+  // API testing: a catalog the agent writes per session and repo, calls made from main to the session's port.
+  // Any repo with a port: Probar also runs the ones outside the session, from a fresh trunk.
+  const apiTarget = (id: string, name: string): { s: Session; file: string; code: string } => {
+    const c = requireCfg()
+    const s = findSession(id)
+    const repo = repoConfigOf(c, name)
+    const code = s.repos.find((r) => r.name === name)?.worktree ?? repo.path
+    return { s, file: catalogFile(sessionDir(c, id), name), code }
+  }
+  const apiPort = (id: string, name: string): number => {
+    const port = runner.ports(id)[name]
+    if (!port || runner.status(id) !== 'running') throw new Error('Dale ▶ Probar para levantar el backend de esta sesión')
+    return port
+  }
+  ipcMain.handle('api:catalog', (_e, id: string, name: string) => {
+    const { file } = apiTarget(id, name)
+    try {
+      return { catalog: readCatalog(file), file }
+    } catch (e) {
+      return { catalog: null, file, error: (e as Error).message }
+    }
+  })
+  ipcMain.handle('api:fill', (_e, id: string, name: string) => {
+    const c = requireCfg()
+    const { s, file, code } = apiTarget(id, name)
+    const agent = agentOf(c, s.agent)
+    const termId = `api:${id}:${Date.now()}`
+    const prompt = apiFillPrompt(name, code, file, c.testUsers ?? [])
+    terminals.set(termId, { cwd: sessionDir(c, id), agent, firstArgs: [...agent.args, prompt] })
+    return termId
+  })
+  ipcMain.handle('api:login', (_e, id: string, name: string, userIndex: number) => {
+    const { file } = apiTarget(id, name)
+    const auth = readCatalog(file)?.auth
+    const user = requireCfg().testUsers?.[userIndex]
+    if (!auth) throw new Error('El catálogo no dice cómo hacer login')
+    if (!user) throw new Error('Ese usuario de prueba no existe en la config')
+    return login(apiPort(id, name), auth, user)
+  })
+  ipcMain.handle('api:send', (_e, id: string, name: string, req: ApiRequest) => sendRequest(apiPort(id, name), req))
+  ipcMain.handle('api:curl', (_e, id: string, name: string, req: ApiRequest) =>
+    curlFor(runner.ports(id)[name] ?? 0, req)
+  )
 
   // The agent that writes a ticket runs in a terminal of its own, in the project root.
   ipcMain.handle('tickets:create-start', (_e, context: string, githubRepo?: string) => {

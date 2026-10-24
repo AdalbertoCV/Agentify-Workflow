@@ -2,6 +2,7 @@ import type { AppConfig, RepoConfig, TestUser, TicketProviderId } from '../main/
 import type { Chunk } from '../main/core/conflicts'
 import type { RebaseState, Resolution } from '../main/core/rebase'
 import type { TicketStatus } from '../main/core/ticketStatus'
+import type { ApiCatalog, ApiRequest, ApiResponse } from '../main/core/apiTesting'
 import type { DeletePlan, DeleteStep, Session } from '../main/core/sessions'
 
 export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser, TicketProviderId }
@@ -59,6 +60,7 @@ export type CommitResult = {
 export type { Chunk, Choice } from '../main/core/conflicts'
 export type { ConflictFile, RebaseState, Resolution } from '../main/core/rebase'
 export type { TicketStatus } from '../main/core/ticketStatus'
+export type { ApiCatalog, ApiEndpoint, ApiRequest, ApiResponse } from '../main/core/apiTesting'
 export type RebaseStart = { repo: string; trunk: string; status: string; replayed?: number; error?: string }
 
 export type OnboardStart = { repoName: string; repoPath: string; workDir: string; terminalId: string }
@@ -100,6 +102,9 @@ export interface AgentifyApi {
     start(id: string): Promise<{ url?: string }>
     stop(id: string): Promise<void>
     logs(id: string): Promise<string>
+    /** Brings up another repo of the folder in the session (and what it needs). */
+    startRepo(id: string, repo: string): Promise<{ url?: string }>
+    runningRepos(id: string): Promise<string[]>
     onLog(cb: (id: string, line: string) => void): () => void
   }
 
@@ -112,6 +117,15 @@ export interface AgentifyApi {
     abort(id: string, repo: string): Promise<void>
     /** submitted false: typed into an agent that was already open; the user presses Enter. */
     askAgent(id: string, repo: string): Promise<{ submitted: boolean }>
+  }
+
+  apiTest: {
+    catalog(id: string, repo: string): Promise<{ catalog: ApiCatalog | null; file: string; error?: string }>
+    /** Opens the session's agent to write the catalog; returns its terminal id. */
+    fill(id: string, repo: string): Promise<string>
+    login(id: string, repo: string, userIndex: number): Promise<{ name: string; value: string }>
+    send(id: string, repo: string, req: ApiRequest): Promise<ApiResponse>
+    curl(id: string, repo: string, req: ApiRequest): Promise<string>
   }
 
   capture(webContentsId: number, rect?: { x: number; y: number; width: number; height: number }): Promise<void>

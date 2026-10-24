@@ -39,6 +39,8 @@ const api: AgentifyApi = {
     start: (id) => invoke('test:start', id),
     stop: (id) => invoke('test:stop', id),
     logs: (id) => invoke('test:logs', id),
+    startRepo: (id, repo) => invoke('test:start-repo', id, repo),
+    runningRepos: (id) => invoke('test:running-repos', id),
     onLog: (cb) => listen('test:log', cb)
   },
 
@@ -50,6 +52,14 @@ const api: AgentifyApi = {
     continue: (id, repo) => invoke('rebase:continue', id, repo),
     abort: (id, repo) => invoke('rebase:abort', id, repo),
     askAgent: (id, repo) => invoke('rebase:ask-agent', id, repo)
+  },
+
+  apiTest: {
+    catalog: (id, repo) => invoke('api:catalog', id, repo),
+    fill: (id, repo) => invoke('api:fill', id, repo),
+    login: (id, repo, i) => invoke('api:login', id, repo, i),
+    send: (id, repo, req) => invoke('api:send', id, repo, req),
+    curl: (id, repo, req) => invoke('api:curl', id, repo, req)
   },
 
   capture: (wcId, rect) => invoke('capture', wcId, rect),

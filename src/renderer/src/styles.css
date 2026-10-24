@@ -998,3 +998,192 @@ button.primary.danger-bg {
 .issue.disabled:hover {
   background: none;
 }
+.top-area {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-bottom: 1px solid var(--line);
+}
+.top-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.top-tabs button {
+  border: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.top-tabs button.on {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.top-slot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.top-slot.hidden {
+  display: none;
+}
+.top-slot > .pane {
+  flex: 1;
+  border-bottom: none;
+}
+.api-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.api-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+.api-note {
+  padding: 4px 10px;
+  color: var(--ok);
+  font-size: 12px;
+}
+button.ok-btn {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.api-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) 1.4fr;
+}
+.api-list {
+  border-right: 1px solid var(--line);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.api-list > input {
+  margin: 8px;
+}
+.api-empty {
+  padding: 12px;
+}
+.api-endpoint {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 2px 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--line);
+}
+.api-endpoint:hover,
+.api-endpoint.on {
+  background: var(--panel-2);
+}
+.api-path {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.api-summary {
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.method {
+  font-size: 11px;
+  font-weight: 700;
+  align-self: center;
+}
+.m-get {
+  color: var(--ok);
+}
+.m-post {
+  color: var(--warn);
+}
+.m-put,
+.m-patch {
+  color: #6aa8ff;
+}
+.m-delete {
+  color: var(--bad);
+}
+.api-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+.api-url {
+  display: flex;
+  gap: 6px;
+}
+.api-url input {
+  flex: 1;
+}
+.api-body {
+  min-height: 110px;
+  resize: vertical;
+  font-size: 12px;
+}
+.api-response {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.api-status {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.api-status .code {
+  font-weight: 700;
+}
+.api-status .code.ok {
+  color: var(--ok);
+}
+.api-status .code.warn {
+  color: var(--warn);
+}
+.api-status .code.bad {
+  color: var(--bad);
+}
+.api-response pre {
+  margin: 0;
+  padding: 8px;
+  font-size: 12px;
+  background: var(--panel-2);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+.api-down {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--warn);
+  font-size: 13px;
+}
+.api-down span {
+  flex: 1;
+}

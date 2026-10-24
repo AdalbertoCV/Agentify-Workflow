@@ -73,6 +73,16 @@ describe('ports', () => {
 })
 
 describe('runner', () => {
+  test('extra repos join the stack with their needs, from trunk', () => {
+    const { cfg, session } = setup()
+    session.repos = [{ name: 'api', worktree: join(cfg.root, 'api'), branch: 'main', createdBranch: false }]
+    expect(resolveStack(cfg, session).map((s) => s.repo.name)).toEqual(['api'])
+    expect(resolveStack(cfg, session, ['web']).map((s) => [s.repo.name, s.fromSession])).toEqual([
+      ['api', true],
+      ['web', false]
+    ])
+  })
+
   test('stack puts needs first and takes missing repos from trunk', () => {
     const { cfg, session } = setup()
     expect(resolveStack(cfg, session).map((s) => [s.repo.name, s.fromSession])).toEqual([
@@ -93,6 +103,30 @@ describe('runner', () => {
     await runner.stop('t-1')
     expect(runner.status('t-1')).toBe('stopped')
     expect(await isPortFree(port)).toBe(true)
+  })
+
+  test('a repo outside the session can be brought up later, into the running session', async () => {
+    const { cfg, session } = setup()
+    session.repos = [{ name: 'api', worktree: join(cfg.root, 'api'), branch: 'main', createdBranch: false }]
+    const runner = new Runner()
+    await runner.start(cfg, session, () => {})
+    expect(runner.runningRepos('t-1')).toEqual(['api'])
+    await runner.startRepo(cfg, session, 'web', () => {})
+    expect(runner.runningRepos('t-1')).toEqual(['api', 'web'])
+    const port = runner.ports('t-1').web
+    expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).toBe('ok')
+    await runner.stop('t-1')
+    expect(await isPortFree(port)).toBe(true)
+  })
+
+  test('bringing up a repo of a stopped session starts the session with it', async () => {
+    const { cfg, session } = setup()
+    session.repos = [{ name: 'api', worktree: join(cfg.root, 'api'), branch: 'main', createdBranch: false }]
+    const runner = new Runner()
+    await runner.startRepo(cfg, session, 'web', () => {})
+    expect(runner.status('t-1')).toBe('running')
+    expect(runner.runningRepos('t-1')).toEqual(['api', 'web'])
+    await runner.stop('t-1')
   })
 
   test('stop also kills a server that outlived its parent process', async () => {
