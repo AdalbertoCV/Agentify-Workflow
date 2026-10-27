@@ -2,7 +2,7 @@ import { spawn as ptySpawn, type IPty } from '@lydell/node-pty'
 import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AgentConfig } from './core/config'
-import { killTree, resolveCommand } from './core/proc'
+import { childEnv, killTree, resolveCommand } from './core/proc'
 
 const HISTORY_LIMIT = 400_000
 export const STARTED_MARKER = '.agentify-started'
@@ -27,7 +27,7 @@ const PARENT_SESSION_VARS = [
 ]
 
 function agentEnv(extra: Record<string, string>): Record<string, string> {
-  const env = { ...process.env, ...extra, FORCE_COLOR: '1' } as Record<string, string>
+  const env = { ...childEnv(), ...extra, FORCE_COLOR: '1' } as Record<string, string>
   for (const k of PARENT_SESSION_VARS) delete env[k]
   return env
 }

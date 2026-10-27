@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { gitBash, resolveCommand, runShell } from '../src/main/core/proc'
+import { childEnv, gitBash, resolveCommand, runShell } from '../src/main/core/proc'
 
 test.skipIf(process.platform !== 'win32')('gitBash resolves Git for Windows bash, never WSL', async () => {
   const bash = await gitBash()
@@ -40,4 +40,32 @@ test('resolveCommand reports a command that is not installed', async () => {
 test('runShell runs a bash line with the extra env', async () => {
   const { stdout } = await runShell('echo "$FOO-$PYTHONUTF8"', { cwd: process.cwd(), env: { FOO: 'bar' } })
   expect(stdout.trim()).toBe('bar-1')
+})
+
+test('children do not inherit the NODE_ENV electron-vite gave the app', () => {
+  const launched = {
+    PATH: 'p',
+    NODE_ENV: 'production',
+    NODE_ENV_ELECTRON_VITE: 'production',
+    ELECTRON_RENDERER_URL: 'http://localhost:5173'
+  }
+  expect(childEnv(launched)).toEqual({ PATH: 'p' })
+})
+
+test('a NODE_ENV the user set on purpose reaches the children', () => {
+  expect(childEnv({ PATH: 'p', NODE_ENV: 'staging' })).toEqual({ PATH: 'p', NODE_ENV: 'staging' })
+})
+
+test('a shell line run by the app does not see the launcher NODE_ENV', async () => {
+  const before = { ...process.env }
+  Object.assign(process.env, { NODE_ENV: 'production', NODE_ENV_ELECTRON_VITE: 'production' })
+  try {
+    const { stdout } = await runShell('echo "[${NODE_ENV:-}]"', { cwd: tmpdir() })
+    expect(stdout.trim()).toBe('[]')
+  } finally {
+    for (const k of ['NODE_ENV', 'NODE_ENV_ELECTRON_VITE']) {
+      if (before[k] === undefined) delete process.env[k]
+      else process.env[k] = before[k]
+    }
+  }
 })

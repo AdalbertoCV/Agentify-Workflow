@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { ProcError, run } from './proc'
+import { childEnv, ProcError, run } from './proc'
 
 export type PgConn = { user: string; password: string; host: string; port: string }
 
@@ -14,7 +14,13 @@ function pgEnv(conn: PgConn): Record<string, string> {
 export async function databaseExists(conn: PgConn, name: string): Promise<boolean> {
   const { stdout } = await run(
     'psql',
-    [...pgArgs(conn), '-d', 'postgres', '-tAc', `select 1 from pg_database where datname='${name.replace(/'/g, "''")}'`],
+    [
+      ...pgArgs(conn),
+      '-d',
+      'postgres',
+      '-tAc',
+      `select 1 from pg_database where datname='${name.replace(/'/g, "''")}'`
+    ],
     { cwd: process.cwd(), env: pgEnv(conn) }
   )
   return stdout.trim() === '1'
@@ -25,12 +31,16 @@ export async function copyDatabase(conn: PgConn, source: string, target: string)
   await run('createdb', [...pgArgs(conn), target], { cwd: process.cwd(), env: pgEnv(conn) })
   try {
     await new Promise<void>((resolve, reject) => {
-      const env = { ...process.env, ...pgEnv(conn) }
+      const env = { ...childEnv(), ...pgEnv(conn) }
       const dump = spawn('pg_dump', [...pgArgs(conn), '-Fc', source], { env, windowsHide: true })
-      const restore = spawn('pg_restore', [...pgArgs(conn), '--no-owner', '--no-acl', '-d', target], {
-        env,
-        windowsHide: true
-      })
+      const restore = spawn(
+        'pg_restore',
+        [...pgArgs(conn), '--no-owner', '--no-acl', '-d', target],
+        {
+          env,
+          windowsHide: true
+        }
+      )
       let dumpErr = ''
       let restoreErr = ''
       dump.stderr.on('data', (d) => (dumpErr += d))
@@ -72,10 +82,14 @@ export async function cloneDatabase(conn: PgConn, template: string, target: stri
 
 export async function renameDatabase(conn: PgConn, from: string, to: string): Promise<void> {
   const q = (n: string): string => `"${n.replace(/"/g, '""')}"`
-  await run('psql', [...pgArgs(conn), '-d', 'postgres', '-c', `ALTER DATABASE ${q(from)} RENAME TO ${q(to)}`], {
-    cwd: process.cwd(),
-    env: pgEnv(conn)
-  })
+  await run(
+    'psql',
+    [...pgArgs(conn), '-d', 'postgres', '-c', `ALTER DATABASE ${q(from)} RENAME TO ${q(to)}`],
+    {
+      cwd: process.cwd(),
+      env: pgEnv(conn)
+    }
+  )
 }
 
 export async function dropDatabase(conn: PgConn, name: string): Promise<void> {

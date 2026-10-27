@@ -6,7 +6,7 @@ import { databaseExists, dropDatabase } from './db'
 import { cloneFromGolden, ensureGolden } from './golden'
 import { markMigrated, migratedFingerprint, migrationsFingerprint } from './migrations'
 import { allocatePorts, listenersOn, portAnswers } from './ports'
-import { gitBash, run, runShell } from './proc'
+import { childEnv, gitBash, run, runShell } from './proc'
 import { dbSource, sameMigrationsAsGolden, sessionDir } from './sessions'
 import { dbNameFor } from './slug'
 import { readSessions, updateSession, type Session } from './store'
@@ -17,7 +17,13 @@ export type TestStatus = 'stopped' | 'starting' | 'running' | 'error'
 const READY_TIMEOUT_MS = 180_000
 
 type Proc = { repo: RepoConfig; child: ChildProcess; cwd: string; env: Record<string, string> }
-type Run = { status: TestStatus; procs: Proc[]; url?: string; logFile: string; ports: Record<string, number> }
+type Run = {
+  status: TestStatus
+  procs: Proc[]
+  url?: string
+  logFile: string
+  ports: Record<string, number>
+}
 
 export function resolveStack(
   cfg: AppConfig,
@@ -80,7 +86,10 @@ export class Runner {
   /** Trunk worktrees a running session is using must not be reset under it. */
   private trunkInUse(repo: string): boolean {
     for (const r of this.runs.values())
-      if (r.status !== 'stopped' && r.procs.some((p) => p.repo.name === repo && p.cwd.includes('.agentify')))
+      if (
+        r.status !== 'stopped' &&
+        r.procs.some((p) => p.repo.name === repo && p.cwd.includes('.agentify'))
+      )
         return true
     return false
   }
@@ -94,7 +103,12 @@ export class Runner {
       return { url: this.url(session.id) }
     const logDir = join(sessionDir(cfg, session.id), 'logs')
     mkdirSync(logDir, { recursive: true })
-    const current: Run = { status: 'starting', procs: [], logFile: join(logDir, 'probar.log'), ports: {} }
+    const current: Run = {
+      status: 'starting',
+      procs: [],
+      logFile: join(logDir, 'probar.log'),
+      ports: {}
+    }
     this.runs.set(session.id, current)
     const log = (repo: string, line: string): void => {
       appendFileSync(current.logFile, `[${repo}] ${line}\n`)
@@ -102,17 +116,22 @@ export class Runner {
     }
     try {
       const stack = resolveStack(cfg, session)
-      if (!stack.length) throw new Error('Ningún repo de esta sesión tiene script de arranque. Agrégalo en Repos.')
+      if (!stack.length)
+        throw new Error('Ningún repo de esta sesión tiene script de arranque. Agrégalo en Repos.')
       const ports = await allocatePorts(cfg, session.id, new Set())
       current.ports = ports
-      const portEnv = Object.fromEntries(Object.entries(ports).map(([k, v]) => [envName(k), String(v)]))
+      const portEnv = Object.fromEntries(
+        Object.entries(ports).map(([k, v]) => [envName(k), String(v)])
+      )
       const bash = await gitBash()
 
       for (const { repo, fromSession } of stack) {
         const own = session.repos.find((r) => r.name === repo.name)
         const cwd = fromSession
           ? own!.worktree
-          : await ensureTrunkWorktree(cfg, repo, !this.trunkInUse(repo.name), (m) => log(repo.name, m))
+          : await ensureTrunkWorktree(cfg, repo, !this.trunkInUse(repo.name), (m) =>
+              log(repo.name, m)
+            )
         await relinkEmptyDirs(cfg, repo, cwd, (m) => log(repo.name, m))
         for (const d of repo.linkDirs) {
           const p = join(cwd, d)
@@ -141,12 +160,17 @@ export class Runner {
           env.AGENTIFY_DB_NAME = dbName
           env[repo.db.nameKey] = dbName
         }
-        const script = isAbsolute(repo.run!.script) ? repo.run!.script : join(cfg.root, repo.run!.script)
+        const script = isAbsolute(repo.run!.script)
+          ? repo.run!.script
+          : join(cfg.root, repo.run!.script)
         if (!existsSync(script)) throw new Error(`${repo.name}: no existe el script ${script}`)
-        log(repo.name, `▶ ${fromSession ? 'rama de la sesión' : `main fresco (${repo.trunk})`} · puerto ${ports[repo.name] ?? '—'}`)
+        log(
+          repo.name,
+          `▶ ${fromSession ? 'rama de la sesión' : `main fresco (${repo.trunk})`} · puerto ${ports[repo.name] ?? '—'}`
+        )
         const child = spawn(bash, ['-lc', `"${script.replace(/\\/g, '/')}"`], {
           cwd,
-          env: { ...process.env, ...env },
+          env: { ...childEnv(), ...env },
           windowsHide: true,
           detached: process.platform !== 'win32'
         })
@@ -177,7 +201,9 @@ export class Runner {
             if (exited !== undefined)
               throw new Error(`${repo.name} terminó (código ${exited}):\n${tail.join('\n')}`)
             if (Date.now() > deadline)
-              throw new Error(`${repo.name} no abrió el puerto ${port} en 3 min:\n${tail.join('\n')}`)
+              throw new Error(
+                `${repo.name} no abrió el puerto ${port} en 3 min:\n${tail.join('\n')}`
+              )
             await new Promise((r) => setTimeout(r, 500))
           }
           log(repo.name, `✓ escuchando en ${port}`)
@@ -192,7 +218,10 @@ export class Runner {
         stack.find((s) => s.repo.name === cfg.browserRepo && s.repo.run?.url) ??
         stack.find((s) => s.repo.run?.url)
       if (browserRepo)
-        current.url = browserRepo.repo.run!.url!.replace('{port}', String(ports[browserRepo.repo.name]))
+        current.url = browserRepo.repo.run!.url!.replace(
+          '{port}',
+          String(ports[browserRepo.repo.name])
+        )
       current.status = 'running'
       return { url: current.url }
     } catch (e) {
@@ -221,7 +250,10 @@ export class Runner {
       log(repo.name, `clonando la base madre → ${name}…`)
       await cloneFromGolden(cfg, repo, name)
       const s = readSessions(cfg.root).find((x) => x.id === session.id)
-      const extraDbs = [...(s?.extraDbs ?? []).filter((d) => d.repo !== repo.name), { repo: repo.name, db: name }]
+      const extraDbs = [
+        ...(s?.extraDbs ?? []).filter((d) => d.repo !== repo.name),
+        { repo: repo.name, db: name }
+      ]
       updateSession(cfg.root, session.id, { extraDbs })
       session.extraDbs = extraDbs
       if (!(await sameMigrationsAsGolden(cfg, repo, cwd))) await migrate()
@@ -234,7 +266,10 @@ export class Runner {
     try {
       await migrate()
     } catch {
-      log(repo.name, `la base ${name} no migra (es de una versión anterior); la recreo desde la base madre…`)
+      log(
+        repo.name,
+        `la base ${name} no migra (es de una versión anterior); la recreo desde la base madre…`
+      )
       await dropDatabase(conn, name)
       await fresh()
     }
@@ -250,14 +285,19 @@ export class Runner {
   ): Promise<void> {
     for (const line of repo.setup) {
       log(repo.name, line)
-      await runShell(line, { cwd, env: { [repo.db!.nameKey]: name, AGENTIFY_DB_NAME: name, AGENTIFY_ROOT: cfg.root } })
+      await runShell(line, {
+        cwd,
+        env: { [repo.db!.nameKey]: name, AGENTIFY_DB_NAME: name, AGENTIFY_ROOT: cfg.root }
+      })
     }
   }
 
   private async killProcs(r: Run): Promise<void> {
     for (const p of [...r.procs].reverse()) {
       if (p.repo.run?.stop) {
-        const stop = isAbsolute(p.repo.run.stop) ? p.repo.run.stop : join(p.env.AGENTIFY_ROOT, p.repo.run.stop)
+        const stop = isAbsolute(p.repo.run.stop)
+          ? p.repo.run.stop
+          : join(p.env.AGENTIFY_ROOT, p.repo.run.stop)
         await runShell(`"${stop.replace(/\\/g, '/')}"`, { cwd: p.cwd, env: p.env }).catch(() => {})
       }
       await killTree(p.child.pid)
@@ -265,7 +305,8 @@ export class Runner {
     r.procs = []
     // Servers can outlive their launcher (uv → python, detached children): anything still
     // listening on this session's ports belongs to it and goes too.
-    for (const port of Object.values(r.ports)) for (const pid of await listenersOn(port)) await killTree(pid)
+    for (const port of Object.values(r.ports))
+      for (const pid of await listenersOn(port)) await killTree(pid)
   }
 
   /** Processes listening on this session's ports: the session's own servers, even detached ones. */

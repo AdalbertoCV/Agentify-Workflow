@@ -12,6 +12,19 @@ export class ProcError extends Error {
   }
 }
 
+/**
+ * The environment for anything the app starts. `electron-vite preview`/`dev` set NODE_ENV for the
+ * app itself; inherited, it makes `npm ci` skip devDependencies and changes how dev servers run.
+ * A NODE_ENV the user set on purpose (no electron-vite marker) is kept.
+ */
+export function childEnv(base: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env = { ...base } as Record<string, string>
+  if (env.NODE_ENV_ELECTRON_VITE) delete env.NODE_ENV
+  delete env.NODE_ENV_ELECTRON_VITE
+  delete env.ELECTRON_RENDERER_URL
+  return env
+}
+
 export interface RunOptions {
   cwd: string
   env?: Record<string, string>
@@ -26,7 +39,7 @@ export function run(
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd: opts.cwd,
-      env: { ...process.env, ...opts.env },
+      env: { ...childEnv(), ...opts.env },
       windowsHide: true
     })
     let stdout = ''
