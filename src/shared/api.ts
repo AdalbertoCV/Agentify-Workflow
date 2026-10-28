@@ -178,8 +178,6 @@ export interface AgentifyApi {
   commit(id: string, message: string): Promise<CommitResult[]>
   openPath(path: string): Promise<void>
   openExternal(url: string): Promise<void>
-  /** Where the Artifacts tab opens: claude.ai's list of your artifacts. */
-  artifactsUrl(): Promise<string>
 
   tickets: {
     provider(): Promise<TicketProviderId>

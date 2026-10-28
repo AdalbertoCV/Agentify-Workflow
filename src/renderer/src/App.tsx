@@ -2,7 +2,6 @@ import logo from './logo.svg'
 import { useCallback, useEffect, useState } from 'react'
 import type { AppConfig, SessionInfo } from '../../shared/api'
 import { api, errorText } from './api'
-import { Artifacts } from './screens/Artifacts'
 import { Board } from './screens/Board'
 import { Connectors } from './screens/Connectors'
 import { LinearBoard } from './screens/LinearBoard'
@@ -10,7 +9,7 @@ import { Office } from './screens/Office'
 import { Repos } from './screens/Repos'
 import { SessionView } from './screens/SessionView'
 
-type Tab = 'sessions' | 'board' | 'office' | 'artifacts' | 'connectors' | 'repos'
+type Tab = 'sessions' | 'board' | 'office' | 'connectors' | 'repos'
 
 function FirstRun({ onReady }: { onReady: (c: AppConfig) => void }): React.JSX.Element {
   const [error, setError] = useState('')
@@ -47,8 +46,6 @@ export default function App(): React.JSX.Element {
   const [cfg, setCfg] = useState<AppConfig | null | undefined>(undefined)
   const [cfgError, setCfgError] = useState('')
   const [tab, setTab] = useState<Tab>('sessions')
-  // claude.ai stays loaded once opened, so coming back to Artifacts does not reload it.
-  const [artifactsOpened, setArtifactsOpened] = useState(false)
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
   const [failing, setFailing] = useState(0)
@@ -183,16 +180,6 @@ export default function App(): React.JSX.Element {
             Oficina{needsYou > 0 && <span className="badge" />}
           </button>
           <button
-            className={`tab ${tab === 'artifacts' ? 'active' : ''}`}
-            onClick={() => {
-              setTab('artifacts')
-              setArtifactsOpened(true)
-            }}
-            title="Tus artifacts de Claude Code"
-          >
-            Artifacts
-          </button>
-          <button
             className={`tab ${tab === 'connectors' ? 'active' : ''}`}
             onClick={() => setTab('connectors')}
           >
@@ -203,6 +190,14 @@ export default function App(): React.JSX.Element {
             onClick={() => setTab('repos')}
           >
             Repos
+          </button>
+          {/* claude.ai has no API for artifacts: your browser already has the session. */}
+          <button
+            className="tab"
+            title="Abre tus artifacts de Claude Code en tu navegador"
+            onClick={() => void api.openExternal('https://claude.ai/code/artifacts')}
+          >
+            Artifacts ↗
           </button>
         </div>
         <span className="spacer" />
@@ -273,7 +268,6 @@ export default function App(): React.JSX.Element {
       {tab === 'connectors' && <Connectors cfg={cfg} onChecked={setFailing} onConfig={setCfg} />}
       {tab === 'repos' && <Repos cfg={cfg} onSaved={setCfg} />}
       {tab === 'office' && <Office cfg={cfg} onConfig={setCfg} />}
-      {artifactsOpened && <Artifacts hidden={tab !== 'artifacts'} />}
     </div>
   )
 }

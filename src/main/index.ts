@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, session } from 'electron'
+import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -6,9 +6,6 @@ import winIcon from '../../resources/icon.ico?asset'
 import { registerIpc } from './ipc'
 
 const APP_ID = 'dev.adalbertocv.agentify'
-// The Artifacts tab's claude.ai login; the renderer uses the same name.
-const CLAUDE_PARTITION = 'persist:claude'
-const SIGN_IN = /^https:\/\/(accounts\.google\.com|appleid\.apple\.com)\//
 
 // Separate profile for automated runs, so they never touch the real settings or secrets.
 if (process.env.AGENTIFY_USER_DATA) app.setPath('userData', process.env.AGENTIFY_USER_DATA)
@@ -69,20 +66,9 @@ app.whenReady().then(() => {
   app.on('web-contents-created', (_e, contents) => {
     if (contents.getType() === 'webview') {
       contents.setWindowOpenHandler(({ url }) => {
-        // Signing in to claude.ai with Google or Apple opens a popup that reports back to the page
-        // that opened it: it has to be a real window, or the sign-in never finishes.
-        if (contents.session === session.fromPartition(CLAUDE_PARTITION) && SIGN_IN.test(url))
-          return {
-            action: 'allow',
-            overrideBrowserWindowOptions: { width: 520, height: 680, autoHideMenuBar: true }
-          }
         contents.loadURL(url)
         return { action: 'deny' }
       })
-      // The popup looks like the page that opened it, so Google does not refuse an embedded browser.
-      contents.on('did-create-window', (child) =>
-        child.webContents.setUserAgent(contents.getUserAgent())
-      )
     }
   })
 

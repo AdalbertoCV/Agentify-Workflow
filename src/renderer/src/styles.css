@@ -1606,27 +1606,3 @@ button.ok-btn {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.artifacts {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow: hidden;
-}
-.artifacts[hidden] {
-  display: none;
-}
-.artifacts-url {
-  max-width: 50%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-.artifacts-view {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  overflow: hidden;
-}

@@ -424,11 +424,6 @@ export function registerIpc(): void {
   )
   ipcMain.handle('open:path', (_e, p: string) => shell.openPath(p))
   ipcMain.handle('open:external', (_e, u: string) => shell.openExternal(u))
-  // AGENTIFY_ARTIFACTS_URL points the Artifacts tab at a stand-in page in the end-to-end tests.
-  ipcMain.handle(
-    'artifacts:url',
-    () => process.env.AGENTIFY_ARTIFACTS_URL ?? 'https://claude.ai/code/artifacts'
-  )
 
   const tickets = (): ReturnType<typeof providerFor> =>
     providerFor(requireCfg(), {

@@ -86,7 +86,6 @@ const api: AgentifyApi = {
   commit: (id, message) => invoke('commit', id, message),
   openPath: (p) => invoke('open:path', p),
   openExternal: (u) => invoke('open:external', u),
-  artifactsUrl: () => invoke('artifacts:url'),
 
   tickets: {
     provider: () => invoke('tickets:provider'),

@@ -37,10 +37,6 @@ function start() {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify(body))
       }
-      if (req.url === '/artifacts') {
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-        return res.end('<!doctype html><title>Artifacts</title><body style="font-family:sans-serif;padding:24px"><h1>Tus artifacts</h1><ul><li>Plan de pedidos</li><li>Tablero de métricas</li></ul></body>')
-      }
       const fire = /^\/routines\/([^/]+)\/fire$/.exec(req.url)
       if (fire) {
         const { text } = JSON.parse(raw || '{}')

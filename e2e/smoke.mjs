@@ -107,7 +107,6 @@ const app = await electron.launch({
     AGENTIFY_USER_DATA: userData,
     PATH: `${fakeBin};${process.env.PATH}`,
     AGENTIFY_LINEAR_URL: `${cloudUrl}/graphql`,
-    AGENTIFY_ARTIFACTS_URL: `${cloudUrl}/artifacts`,
     AGENTIFY_ROUTINES_URL: `${cloudUrl}/routines`
   }
 })
@@ -416,12 +415,6 @@ try {
   if (!cloud.state.moves.includes('DEMO-101→In Review')) throw new Error(`Linear no recibió el cambio: ${cloud.state.moves}`)
   await col('In Review').locator('.kcard.status-in-review[data-ticket="DEMO-101"]').waitFor({ timeout: 15000 })
   await step('13f-tablero-arrastrar')
-
-  // Artifacts: claude.ai inside the app (a stand-in page here), kept loaded between tabs.
-  await page.getByRole('button', { name: 'Artifacts' }).click()
-  await page.locator('.artifacts-url', { hasText: '/artifacts' }).waitFor({ timeout: 15000 })
-  await page.waitForTimeout(500)
-  await step('14-artifacts')
 
   await page.getByRole('button', { name: 'Repos' }).click()
   await step('11-repos')
