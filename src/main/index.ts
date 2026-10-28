@@ -2,7 +2,10 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import winIcon from '../../resources/icon.ico?asset'
 import { registerIpc } from './ipc'
+
+const APP_ID = 'dev.adalbertocv.agentify'
 
 // Separate profile for automated runs, so they never touch the real settings or secrets.
 if (process.env.AGENTIFY_USER_DATA) app.setPath('userData', process.env.AGENTIFY_USER_DATA)
@@ -25,6 +28,16 @@ function createWindow(): void {
     }
   })
 
+  // Run from source the process is electron.exe, and the taskbar would show Electron's icon:
+  // give the window its own app id and icon.
+  if (process.platform === 'win32' && !app.isPackaged)
+    mainWindow.setAppDetails({
+      appId: APP_ID,
+      appIconPath: winIcon,
+      relaunchCommand: `"${process.execPath}" "${app.getAppPath()}"`,
+      relaunchDisplayName: 'Agentify-Workflow'
+    })
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.maximize()
     mainWindow.show()
@@ -43,7 +56,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('dev.adalbertocv.agentify')
+  electronApp.setAppUserModelId(APP_ID)
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
