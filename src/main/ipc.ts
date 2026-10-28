@@ -1,4 +1,13 @@
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, shell, webContents } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  ClipboardItem,
+  dialog,
+  ipcMain,
+  shell,
+  webContents
+} from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { agentState, installClaudeHooks } from './core/agentState'
@@ -32,17 +41,36 @@ import {
   type RebaseState,
   type Resolution
 } from './core/rebase'
-import { createSession, planDelete, repoConfig as repoConfigOf, runDelete, sessionDir } from './core/sessions'
+import {
+  createSession,
+  planDelete,
+  repoConfig as repoConfigOf,
+  runDelete,
+  sessionDir
+} from './core/sessions'
 import { readSessions, updateSession, type Session } from './core/store'
 import { providerFor, ticketPrompt } from './core/tickets'
 import { buildInfo, newerOnDisk, type BuildInfo } from './core/buildInfo'
-import { apiFillPrompt, catalogFile, curlFor, login, readCatalog, sendRequest, type ApiRequest } from './core/apiTesting'
+import {
+  apiFillPrompt,
+  catalogFile,
+  curlFor,
+  login,
+  readCatalog,
+  sendRequest,
+  type ApiRequest
+} from './core/apiTesting'
 import { registerOffice } from './office'
 import { PtyManager } from './pty'
 import { getSecret, setSecret } from './secrets'
 import type { SessionInfo, DeleteProgress } from '../shared/api'
 
-type TerminalSpec = { cwd: string; agent: AgentConfig; firstArgs?: string[]; env?: Record<string, string> }
+type TerminalSpec = {
+  cwd: string
+  agent: AgentConfig
+  firstArgs?: string[]
+  env?: Record<string, string>
+}
 
 const ptys = new PtyManager()
 const runner = new Runner()
@@ -73,7 +101,11 @@ function findSession(id: string): Session {
 }
 
 function agentOf(c: AppConfig, id: string): AgentConfig {
-  return c.agents.find((a) => a.id === id) ?? c.agents.find((a) => a.id === c.defaultAgent) ?? c.agents[0]
+  return (
+    c.agents.find((a) => a.id === id) ??
+    c.agents.find((a) => a.id === c.defaultAgent) ??
+    c.agents[0]
+  )
 }
 
 /** Imported sessions have no folder of their own yet: give them one with the usual AGENTS.md. */
@@ -92,7 +124,9 @@ function ensureSessionDir(c: AppConfig, s: Session): string {
 }
 
 function copyPng(png: Buffer): Promise<void> {
-  return clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png)], { type: 'image/png' }) })])
+  return clipboard.write([
+    new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png)], { type: 'image/png' }) })
+  ])
 }
 
 const GOLDEN_MAX_AGE_MS = 12 * 60 * 60 * 1000
@@ -106,12 +140,11 @@ function warmGoldens(): void {
   if (!c) return
   for (const repo of c.repos.filter((r) => r.db && existsSync(r.path))) {
     const at = goldenCopiedAt(c, repo.name)
-    const recopy = repo.db!.source !== 'empty' && (!at || Date.now() - at.getTime() > GOLDEN_MAX_AGE_MS)
+    const recopy =
+      repo.db!.source !== 'empty' && (!at || Date.now() - at.getTime() > GOLDEN_MAX_AGE_MS)
     void ensureGolden(c, repo, (m) => broadcast('sessions:progress', m), { recopy })
       .then(() => prepareSpare(c, repo))
-      .catch((e) =>
-      broadcast('sessions:progress', `✗ ${(e as Error).message}`)
-    )
+      .catch((e) => broadcast('sessions:progress', `✗ ${(e as Error).message}`))
   }
 }
 
@@ -210,11 +243,17 @@ export function registerIpc(): void {
       .then((r) => {
         const now = deletions.get(id)!
         if (r.status === 'needs-confirm')
-          return publish({ ...now, phase: 'paused', plan: { ...now.plan, risks: r.risks, processes: r.processes } })
+          return publish({
+            ...now,
+            phase: 'paused',
+            plan: { ...now.plan, risks: r.risks, processes: r.processes }
+          })
         publish({ ...now, phase: 'deleted' })
         setTimeout(() => deletions.get(id)?.phase === 'deleted' && deletions.delete(id), 5000)
       })
-      .catch((e) => publish({ ...deletions.get(id)!, phase: 'failed', error: (e as Error).message }))
+      .catch((e) =>
+        publish({ ...deletions.get(id)!, phase: 'failed', error: (e as Error).message })
+      )
       .finally(() => broadcast('sessions:changed'))
   })
 
@@ -239,7 +278,14 @@ export function registerIpc(): void {
     const agent = agentOf(c, s.agent)
     if (agent.waiting === 'claude-hooks') installClaudeHooks(dir)
     const prompt = c.startPrompt?.replace(/{ticket}/g, s.ticket).replace(/{title}/g, s.title)
-    await ptys.open(id, dir, agent, { AGENTIFY_SESSION: id }, undefined, s.imported ? undefined : prompt)
+    await ptys.open(
+      id,
+      dir,
+      agent,
+      { AGENTIFY_SESSION: id },
+      undefined,
+      s.imported ? undefined : prompt
+    )
   }
 
   ipcMain.handle('pty:open', async (_e, id: string) => {
@@ -254,7 +300,9 @@ export function registerIpc(): void {
     await ptys.forget(id)
   })
   ipcMain.on('pty:write', (_e, id: string, data: string) => ptys.write(id, data))
-  ipcMain.on('pty:resize', (_e, id: string, cols: number, rows: number) => ptys.resize(id, cols, rows))
+  ipcMain.on('pty:resize', (_e, id: string, cols: number, rows: number) =>
+    ptys.resize(id, cols, rows)
+  )
 
   ipcMain.handle('test:start', async (_e, id: string) => {
     const c = requireCfg()
@@ -308,11 +356,21 @@ export function registerIpc(): void {
     return { wt: r.worktree, repo: repoConfigOf(requireCfg(), name) }
   }
   ipcMain.handle('rebase:start', async (_e, id: string) => {
-    const out: { repo: string; status: string; replayed?: number; trunk: string; error?: string }[] = []
+    const out: {
+      repo: string
+      status: string
+      replayed?: number
+      trunk: string
+      error?: string
+    }[] = []
     for (const r of findSession(id).repos) {
       const repo = repoConfigOf(requireCfg(), r.name)
       try {
-        out.push({ repo: r.name, trunk: repo.trunk, ...(await startRebase(r.worktree, repo.trunk, [...repo.copyFiles, ...repo.linkDirs])) })
+        out.push({
+          repo: r.name,
+          trunk: repo.trunk,
+          ...(await startRebase(r.worktree, repo.trunk, [...repo.copyFiles, ...repo.linkDirs]))
+        })
       } catch (e) {
         out.push({ repo: r.name, trunk: repo.trunk, status: 'error', error: (e as Error).message })
       }
@@ -321,7 +379,8 @@ export function registerIpc(): void {
   })
   ipcMain.handle('rebase:state', async (_e, id: string) => {
     const out: Record<string, RebaseState> = {}
-    for (const r of findSession(id).repos) if (existsSync(r.worktree)) out[r.name] = await rebaseState(r.worktree)
+    for (const r of findSession(id).repos)
+      if (existsSync(r.worktree)) out[r.name] = await rebaseState(r.worktree)
     return out
   })
   ipcMain.handle('rebase:chunks', (_e, id: string, name: string, path: string) =>
@@ -330,8 +389,12 @@ export function registerIpc(): void {
   ipcMain.handle('rebase:resolve', (_e, id: string, name: string, path: string, how: Resolution) =>
     resolveConflictFile(sessionRepo(id, name).wt, path, how)
   )
-  ipcMain.handle('rebase:continue', (_e, id: string, name: string) => continueRebase(sessionRepo(id, name).wt))
-  ipcMain.handle('rebase:abort', (_e, id: string, name: string) => abortRebase(sessionRepo(id, name).wt))
+  ipcMain.handle('rebase:continue', (_e, id: string, name: string) =>
+    continueRebase(sessionRepo(id, name).wt)
+  )
+  ipcMain.handle('rebase:abort', (_e, id: string, name: string) =>
+    abortRebase(sessionRepo(id, name).wt)
+  )
   ipcMain.handle('rebase:ask-agent', async (_e, id: string, name: string) => {
     const { wt, repo } = sessionRepo(id, name)
     const { conflicts } = await rebaseState(wt)
@@ -339,7 +402,8 @@ export function registerIpc(): void {
     await openAgent(id)
     // A freshly started agent ignores input until its screen settles.
     if (!wasOpen)
-      for (let i = 0; i < 60 && Date.now() - ptys.lastOutputAt(id) < 2000; i++) await new Promise((r) => setTimeout(r, 500))
+      for (let i = 0; i < 60 && Date.now() - ptys.lastOutputAt(id) < 2000; i++)
+        await new Promise((r) => setTimeout(r, 500))
     const files = conflicts.map((f) => f.path).join(', ')
     ptys.write(
       id,
@@ -355,9 +419,16 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('diff', (_e, id: string) => sessionDiff(requireCfg(), findSession(id)))
-  ipcMain.handle('commit', (_e, id: string, message: string) => commitAndPush(requireCfg(), findSession(id), message))
+  ipcMain.handle('commit', (_e, id: string, message: string) =>
+    commitAndPush(requireCfg(), findSession(id), message)
+  )
   ipcMain.handle('open:path', (_e, p: string) => shell.openPath(p))
   ipcMain.handle('open:external', (_e, u: string) => shell.openExternal(u))
+  // AGENTIFY_ARTIFACTS_URL points the Artifacts tab at a stand-in page in the end-to-end tests.
+  ipcMain.handle(
+    'artifacts:url',
+    () => process.env.AGENTIFY_ARTIFACTS_URL ?? 'https://claude.ai/code/artifacts'
+  )
 
   const tickets = (): ReturnType<typeof providerFor> =>
     providerFor(requireCfg(), {
@@ -408,7 +479,8 @@ export function registerIpc(): void {
   }
   const apiPort = (id: string, name: string): number => {
     const port = runner.ports(id)[name]
-    if (!port || runner.status(id) !== 'running') throw new Error('Dale ▶ Probar para levantar el backend de esta sesión')
+    if (!port || runner.status(id) !== 'running')
+      throw new Error('Dale ▶ Probar para levantar el backend de esta sesión')
     return port
   }
   ipcMain.handle('api:catalog', (_e, id: string, name: string) => {
@@ -436,7 +508,9 @@ export function registerIpc(): void {
     if (!user) throw new Error('Ese usuario de prueba no existe en la config')
     return login(apiPort(id, name), auth, user)
   })
-  ipcMain.handle('api:send', (_e, id: string, name: string, req: ApiRequest) => sendRequest(apiPort(id, name), req))
+  ipcMain.handle('api:send', (_e, id: string, name: string, req: ApiRequest) =>
+    sendRequest(apiPort(id, name), req)
+  )
   ipcMain.handle('api:curl', (_e, id: string, name: string, req: ApiRequest) =>
     curlFor(runner.ports(id)[name] ?? 0, req)
   )
@@ -456,7 +530,9 @@ export function registerIpc(): void {
     return cfg
   })
 
-  const started = buildInfo(app.getAppPath()).catch(() => ({ version: app.getVersion() }) as BuildInfo)
+  const started = buildInfo(app.getAppPath()).catch(
+    () => ({ version: app.getVersion() }) as BuildInfo
+  )
   ipcMain.handle('app:build', async () => {
     const info = await started
     return { ...info, newer: await newerOnDisk(app.getAppPath(), info).catch(() => null) }
@@ -491,7 +567,9 @@ export function registerIpc(): void {
   ipcMain.handle('repos:golden-info', () => {
     const c = requireCfg()
     return Object.fromEntries(
-      c.repos.filter((r) => r.db).map((r) => [r.name, goldenCopiedAt(c, r.name)?.toISOString() ?? null])
+      c.repos
+        .filter((r) => r.db)
+        .map((r) => [r.name, goldenCopiedAt(c, r.name)?.toISOString() ?? null])
     )
   })
   ipcMain.handle('repos:golden-refresh', async (_e, name: string) => {

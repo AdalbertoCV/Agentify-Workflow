@@ -1518,3 +1518,115 @@ button.ok-btn {
   gap: 8px;
   align-items: center;
 }
+.kcard[draggable='true'] {
+  cursor: grab;
+}
+.kcard.moving {
+  opacity: 0.6;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.kanban.dragging .kcol {
+  transition:
+    opacity 0.15s,
+    border-color 0.15s;
+}
+.kcol.drop-no {
+  opacity: 0.4;
+}
+.kcol.drop-ok {
+  border-style: dashed;
+}
+.kcol.over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.kparent {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.kparent:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.kkids {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.kkids.all {
+  color: var(--ok);
+}
+.kfamily {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.klink {
+  --status: #f2f4f8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--status);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.klink:hover {
+  border-color: var(--accent);
+  border-left-color: var(--status);
+}
+.klink.status-in-progress {
+  --status: var(--warn);
+}
+.klink.status-in-review {
+  --status: var(--ok);
+}
+.klink.status-blocked {
+  --status: var(--bad);
+}
+.klink.done {
+  --status: var(--muted);
+  opacity: 0.65;
+}
+.klink .id {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.klink-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifacts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+.artifacts[hidden] {
+  display: none;
+}
+.artifacts-url {
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.artifacts-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
