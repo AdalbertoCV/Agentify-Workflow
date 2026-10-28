@@ -9,7 +9,7 @@ const STATUS: Record<Desk['status'], { label: string; cls: string }> = {
   idle: { label: 'Sin actividad', cls: 'idle' }
 }
 
-function Avatar({ avatar, name }: { avatar?: string; name: string }): React.JSX.Element {
+export function Avatar({ avatar, name }: { avatar?: string; name: string }): React.JSX.Element {
   if (avatar && /^(https?:|data:|file:)/.test(avatar))
     return <img className="bot-avatar" src={avatar} alt="" />
   return <span className="bot-avatar">{avatar || name.slice(0, 1)}</span>

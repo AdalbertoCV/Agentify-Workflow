@@ -20,9 +20,12 @@ export function NewSessionDialog({
   cfg,
   onClose,
   onCreated,
-  onConnect
+  onConnect,
+  initialTicket
 }: {
   cfg: AppConfig
+  /** Comes from the board: that ticket is picked as soon as the list loads. */
+  initialTicket?: string
   onClose: () => void
   onCreated: (s: Session) => void
   onConnect: () => void
@@ -47,14 +50,24 @@ export function NewSessionDialog({
       setProvider(p)
       if (p === 'manual') return
       try {
-        setIssues(await api.tickets.list())
+        const list = await api.tickets.list()
+        setIssues(list)
         setLoaded(true)
+        // Opened from the board: that ticket comes picked.
+        const preset = list.find((i) => i.identifier === initialTicket)
+        if (preset) {
+          setPicked(preset.identifier)
+          setTicket(preset.identifier)
+          setTitle(preset.title)
+          const fromTicket = await api.tickets.reposFor(preset)
+          if (fromTicket.length) setRepos(fromTicket)
+        }
       } catch (e) {
         setIssuesError(errorText(e))
       }
     })
     return api.onProgress((m) => setProgress((p) => [...p, m]))
-  }, [])
+  }, [initialTicket])
 
   useEffect(() => {
     progressEl.current?.scrollTo(0, progressEl.current.scrollHeight)

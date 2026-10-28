@@ -5,6 +5,7 @@ import type { TicketStatus } from '../main/core/ticketStatus'
 import type { ApiCatalog, ApiRequest, ApiResponse } from '../main/core/apiTesting'
 import type { BotConfig } from '../main/core/bots'
 import type { Desk } from '../main/core/office'
+import type { BoardColumn } from '../main/core/board'
 import type { DeletePlan, DeleteStep, Session } from '../main/core/sessions'
 
 export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser, TicketProviderId }
@@ -65,9 +66,21 @@ export type { TicketStatus } from '../main/core/ticketStatus'
 export type { ApiCatalog, ApiEndpoint, ApiRequest, ApiResponse } from '../main/core/apiTesting'
 export type { BotConfig } from '../main/core/bots'
 export type { Desk } from '../main/core/office'
-export type RebaseStart = { repo: string; trunk: string; status: string; replayed?: number; error?: string }
+export type { BoardCard, BoardColumn } from '../main/core/board'
+export type RebaseStart = {
+  repo: string
+  trunk: string
+  status: string
+  replayed?: number
+  error?: string
+}
 
-export type OnboardStart = { repoName: string; repoPath: string; workDir: string; terminalId: string }
+export type OnboardStart = {
+  repoName: string
+  repoPath: string
+  workDir: string
+  terminalId: string
+}
 
 export type OnboardResult = { repo: RepoConfig; runScript: string; stopScript?: string }
 
@@ -124,7 +137,10 @@ export interface AgentifyApi {
   }
 
   apiTest: {
-    catalog(id: string, repo: string): Promise<{ catalog: ApiCatalog | null; file: string; error?: string }>
+    catalog(
+      id: string,
+      repo: string
+    ): Promise<{ catalog: ApiCatalog | null; file: string; error?: string }>
     /** Opens the session's agent to write the catalog; returns its terminal id. */
     fill(id: string, repo: string): Promise<string>
     login(id: string, repo: string, userIndex: number): Promise<{ name: string; value: string }>
@@ -143,12 +159,17 @@ export interface AgentifyApi {
     onChanged(cb: (desks: Desk[]) => void): () => void
     onFocus(cb: (key: string) => void): () => void
   }
+  /** Your Linear tickets by state, with the bot that works each one. */
+  board(): Promise<BoardColumn[]>
   bots: {
     save(bots: BotConfig[], tokens: Record<string, string>): Promise<AppConfig>
     hasToken(id: string): Promise<boolean>
   }
 
-  capture(webContentsId: number, rect?: { x: number; y: number; width: number; height: number }): Promise<void>
+  capture(
+    webContentsId: number,
+    rect?: { x: number; y: number; width: number; height: number }
+  ): Promise<void>
   diff(id: string): Promise<RepoDiff[]>
   commit(id: string, message: string): Promise<CommitResult[]>
   openPath(path: string): Promise<void>

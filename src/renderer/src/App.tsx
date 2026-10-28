@@ -4,11 +4,12 @@ import type { AppConfig, SessionInfo } from '../../shared/api'
 import { api, errorText } from './api'
 import { Board } from './screens/Board'
 import { Connectors } from './screens/Connectors'
+import { LinearBoard } from './screens/LinearBoard'
 import { Office } from './screens/Office'
 import { Repos } from './screens/Repos'
 import { SessionView } from './screens/SessionView'
 
-type Tab = 'sessions' | 'office' | 'connectors' | 'repos'
+type Tab = 'sessions' | 'board' | 'office' | 'connectors' | 'repos'
 
 function FirstRun({ onReady }: { onReady: (c: AppConfig) => void }): React.JSX.Element {
   const [error, setError] = useState('')
@@ -51,6 +52,8 @@ export default function App(): React.JSX.Element {
   const [activity, setActivity] = useState('')
   // Bots that need an answer light the Office tab; a click on their notification opens it.
   const [needsYou, setNeedsYou] = useState(0)
+  // The board reads Linear: it shows only when Linear is the ticket provider.
+  const [onLinear, setOnLinear] = useState(false)
   useEffect(() => {
     const offChanged = api.office.onChanged((desks) =>
       setNeedsYou(desks.filter((d) => d.status === 'needs-you').length)
@@ -93,6 +96,10 @@ export default function App(): React.JSX.Element {
     void api
       .connectors()
       .then((c) => setFailing(c.filter((x) => !x.ok).length))
+      .catch(() => {})
+    void api.tickets
+      .provider()
+      .then((p) => setOnLinear(p === 'linear'))
       .catch(() => {})
     return api.onSessionsChanged(refresh)
   }, [cfg, refresh])
@@ -157,6 +164,14 @@ export default function App(): React.JSX.Element {
           >
             Sesiones
           </button>
+          {onLinear && (
+            <button
+              className={`tab ${tab === 'board' ? 'active' : ''}`}
+              onClick={() => setTab('board')}
+            >
+              Tablero
+            </button>
+          )}
           <button
             className={`tab ${tab === 'office' ? 'active' : ''}`}
             onClick={() => setTab('office')}
@@ -226,6 +241,16 @@ export default function App(): React.JSX.Element {
           sessions={sessions}
           refresh={refresh}
           onOpen={(id) => {
+            refresh()
+            setOpenId(id)
+          }}
+          onConnect={() => setTab('connectors')}
+        />
+      )}
+      {tab === 'board' && onLinear && (
+        <LinearBoard
+          cfg={cfg}
+          onOpenSession={(id) => {
             refresh()
             setOpenId(id)
           }}

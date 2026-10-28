@@ -6,7 +6,17 @@ function start() {
   const state = {
     labels: { 'label-bot': 'bot-demo' },
     issues: [
-      { id: 'uuid-100', identifier: 'DEMO-100', title: 'Filtrar pedidos por estado', url: 'https://linear.app/demo/issue/DEMO-100', labels: [], comments: [], prUrls: [], state: 'Todo', type: 'unstarted' }
+      { id: 'uuid-100', identifier: 'DEMO-100', title: 'Filtrar pedidos por estado', url: 'https://linear.app/demo/issue/DEMO-100', labels: [], comments: [], prUrls: [], state: 'Todo', type: 'unstarted' },
+      { id: 'uuid-101', identifier: 'DEMO-101', title: 'Exportar pedidos a CSV', url: 'https://linear.app/demo/issue/DEMO-101', labels: [], comments: [], prUrls: [], state: 'Todo', type: 'unstarted', priority: 2 },
+      { id: 'uuid-99', identifier: 'DEMO-99', title: 'Paginar la lista de pedidos', url: 'https://linear.app/demo/issue/DEMO-99', labels: [], comments: [], prUrls: [], state: 'Done', type: 'completed' }
+    ],
+    states: [
+      { name: 'Backlog', type: 'backlog', position: 0, color: '#bec2c8' },
+      { name: 'Todo', type: 'unstarted', position: 1, color: '#e2e2e2' },
+      { name: 'In Progress', type: 'started', position: 2, color: '#f2c94c' },
+      { name: 'In Review', type: 'started', position: 3, color: '#0f9d58' },
+      { name: 'Done', type: 'completed', position: 4, color: '#5e6ad2' },
+      { name: 'Canceled', type: 'canceled', position: 5, color: '#95a2b3' }
     ],
     fires: []
   }
@@ -41,12 +51,23 @@ function start() {
       }
       const { query, variables = {} } = JSON.parse(raw || '{}')
       if (query.includes('viewer { name }')) return json({ data: { viewer: { name: 'Demo' } } })
+      const card = (i) => ({ identifier: i.identifier, title: i.title, description: '', url: i.url, priority: i.priority ?? 0, updatedAt: '2026-10-01T00:00:00Z', team: { key: 'DEMO' }, labels: { nodes: i.labels.map((name) => ({ name })) }, state: { name: i.state, type: i.type }, inverseRelations: { nodes: [] } })
+      if (query.includes('open: assignedIssues'))
+        return json({
+          data: {
+            viewer: {
+              teams: { nodes: [{ key: 'DEMO', states: { nodes: state.states } }] },
+              open: { nodes: state.issues.filter((i) => i.type !== 'completed').map(card) },
+              done: { nodes: state.issues.filter((i) => i.type === 'completed').map(card) }
+            }
+          }
+        })
       if (query.includes('assignedIssues'))
         return json({
           data: {
             viewer: {
               assignedIssues: {
-                nodes: state.issues.map((i) => ({ identifier: i.identifier, title: i.title, description: '', url: i.url, state: { name: i.state, type: i.type }, inverseRelations: { nodes: [] } }))
+                nodes: state.issues.filter((i) => i.type !== 'completed').map((i) => ({ identifier: i.identifier, title: i.title, description: '', url: i.url, state: { name: i.state, type: i.type }, inverseRelations: { nodes: [] } }))
               }
             }
           }

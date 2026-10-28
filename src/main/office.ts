@@ -3,7 +3,8 @@ import { BrowserWindow, ipcMain, Notification } from 'electron'
 import { fireRoutine, readStore, writeStore, type BotConfig, type BotRun } from './core/bots'
 import { saveConfig, type AppConfig } from './core/config'
 import { prState } from './core/github'
-import { addIssueLabel, commentOnIssue, labelledIssues } from './core/linear'
+import { buildBoard } from './core/board'
+import { addIssueLabel, boardIssues, commentOnIssue, labelledIssues } from './core/linear'
 import { buildDesks, iterateText, planIterations, type Desk } from './core/office'
 import { runResolved } from './core/proc'
 import { getSecret, setSecret } from './secrets'
@@ -31,7 +32,7 @@ export function registerOffice(
   }
   const linearKey = (): string => {
     const key = getSecret('linear')
-    if (!key) throw new Error('La Oficina lee a los bots en Linear: conecta Linear en Conectores')
+    if (!key) throw new Error('Conecta Linear en Conectores para leer tus tickets')
     return key
   }
 
@@ -180,4 +181,9 @@ export function registerOffice(
     return c
   })
   ipcMain.handle('bots:has-token', (_e, id: string) => Boolean(getSecret(`bot:${id}`)))
+  // The board puts each bot's avatar, and its desk light, on the tickets it works.
+  ipcMain.handle('board:get', async () => {
+    const { issues, teams } = await boardIssues(linearKey())
+    return buildBoard(issues, teams, requireCfg().bots ?? [], desks)
+  })
 }

@@ -73,6 +73,7 @@ const api: AgentifyApi = {
     onChanged: (cb) => listen('office:changed', cb),
     onFocus: (cb) => listen('office:focus', cb)
   },
+  board: () => invoke('board:get'),
   bots: {
     save: (bots, tokens) => invoke('bots:save', bots, tokens),
     hasToken: (id) => invoke('bots:has-token', id)

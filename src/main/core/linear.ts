@@ -1,3 +1,4 @@
+import type { BoardIssue, TeamStates, WorkflowState } from './board'
 import { linearStatus, type TicketStatus } from './ticketStatus'
 
 export type Issue = {
@@ -72,6 +73,74 @@ export async function listMyIssues(key: string, fetchFn: typeof fetch = fetch): 
     url: n.url,
     ...linearStatus(n.state, n.inverseRelations.nodes)
   }))
+}
+
+/** Your tickets for the board: open ones plus the ones done in the last 14 days, and your teams' workflows. */
+export async function boardIssues(
+  key: string,
+  fetchFn: typeof fetch = fetch
+): Promise<{ issues: BoardIssue[]; teams: TeamStates[] }> {
+  const query = `{
+    viewer {
+      teams(first: 20) { nodes { key states(first: 30) { nodes { name type position color } } } }
+      open: assignedIssues(
+        first: 100
+        orderBy: updatedAt
+        filter: { state: { type: { nin: ["completed", "canceled"] } } }
+      ) { ...card }
+      done: assignedIssues(
+        first: 100
+        orderBy: updatedAt
+        filter: { state: { type: { eq: "completed" } }, completedAt: { gt: "-P14D" } }
+      ) { ...card }
+    }
+  }
+  fragment card on IssueConnection {
+    nodes {
+      identifier title description url priority updatedAt
+      team { key }
+      labels(first: 10) { nodes { name } }
+      state { name type }
+      inverseRelations(first: 10) { nodes { type issue { identifier state { type } } } }
+    }
+  }`
+  type Node = {
+    identifier: string
+    title: string
+    description: string | null
+    url: string
+    priority: number
+    updatedAt: string
+    team: { key: string }
+    labels: { nodes: { name: string }[] }
+    state: { name: string; type: string }
+    inverseRelations: {
+      nodes: { type: string; issue: { identifier: string; state: { type: string } } }[]
+    }
+  }
+  const data = await gql<{
+    viewer: {
+      teams: { nodes: { key: string; states: { nodes: WorkflowState[] } }[] }
+      open: { nodes: Node[] }
+      done: { nodes: Node[] }
+    }
+  }>(key, query, fetchFn)
+  return {
+    teams: data.viewer.teams.nodes.map((t) => ({ key: t.key, states: t.states.nodes })),
+    // Two lists so a busy fortnight of done tickets never pushes open ones out of the first 100.
+    issues: [...data.viewer.open.nodes, ...data.viewer.done.nodes].map((n) => ({
+      identifier: n.identifier,
+      title: n.title,
+      description: n.description ?? '',
+      url: n.url,
+      state: n.state.name,
+      ...linearStatus(n.state, n.inverseRelations.nodes),
+      priority: n.priority,
+      labels: n.labels.nodes.map((l) => l.name),
+      team: n.team.key,
+      updatedAt: n.updatedAt
+    }))
+  }
 }
 
 /** Repos named on the ticket's `**Repos:**` line, limited to the ones the config knows. */
