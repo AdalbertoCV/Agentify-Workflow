@@ -38,6 +38,7 @@ migrations break for every other branch, and deleting a worktree that silently f
 | **Browser** | An embedded browser on the session's app, with region and full-page screenshots copied straight to the clipboard. |
 | **Diff** | What is not committed yet, per repo, collapsible, unified or side by side — plus **Commit and push** (never to protected branches). |
 | **Rebase** | **Actualizar con main** rebases every repo onto its trunk. Conflicts show up side by side in the app: pick main, your branch or both per block, or hand the files to the agent, then continue. A rewritten branch is pushed with `--force-with-lease`. |
+| **API** | Try a backend with no front: the agent reads the repo and lists every endpoint with an example payload; log in once with a test user and send any call, see status, time and body, or copy it as curl. Any repo of the folder can be brought up in the running session. |
 | **Delete** | Asks first, then shows each step — servers and agent stopped, worktrees, branches, databases — with its time until the session is gone. Anything that appears after you confirmed pauses it; a failed delete can be retried. |
 
 ## Highlights
@@ -45,7 +46,8 @@ migrations break for every other branch, and deleting a worktree that silently f
 - **Fast.** Measured on a real Django + React project: creating a session ~8 s, its database ~1 s, the full stack up in ~10 s.
 - **Generated start scripts.** Add a repo from the **Repos** tab and the agent reads it and writes its `run.sh` / `stop.sh` / config; you review and save.
 - **Connectors tab.** Git, GitHub CLI, Docker, PostgreSQL, each agent CLI and your ticket source, with a one-click fix for whatever is missing.
-- **Tickets from Linear, GitHub Issues or by hand.** Choose the source in Connectors. Pick a ticket from your list and the repos it names (a `**Repos:**` line) are preselected; GitHub issues preselect the repo they live in.
+- **Tickets from Linear, GitHub Issues or by hand.** Choose the source in Connectors. Pick a ticket from your list and the repos it names (a `**Repos:**` line) are preselected; GitHub issues preselect the repo they live in. Blocked, in-progress and in-review tickets cannot be picked, and a blocked one says which ticket it waits for.
+- **The Office: bots in the cloud.** Claude Code routines that work tickets in their own sandbox, several at once. Assign a ticket, and each desk shows the bot's avatar, a bubble with where it stands and a light — working, done (the PR's ready check passed) or needs you (it asked something; answer from the desk). While the app is open it watches their PRs and asks for one iteration at a time when CI or the review turns red.
 - **Write tickets with the agent.** **+ Nuevo ticket** takes a few lines of context and has your agent create the ticket in Linear or GitHub Issues. Set `ticketPrompt` (e.g. `/my-team:ticket {context}`) to use your team's own ticket skill.
 - **Knows when it is stale.** The top bar shows the version and commit the app started from, and warns when a newer commit is on disk and the app needs a restart.
 - **Mock data for every model.** `examples/django-vite/repos/api/seed_all_models.py` fills a few rows of every Django model of your project, with signals muted so nothing reaches queues or mail.
