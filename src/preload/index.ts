@@ -74,6 +74,8 @@ const api: AgentifyApi = {
     onFocus: (cb) => listen('office:focus', cb)
   },
   board: () => invoke('board:get'),
+  boardIssue: (identifier) => invoke('board:issue', identifier),
+  boardMove: (identifier, stateId) => invoke('board:move', identifier, stateId),
   bots: {
     save: (bots, tokens) => invoke('bots:save', bots, tokens),
     hasToken: (id) => invoke('bots:has-token', id)
@@ -84,6 +86,7 @@ const api: AgentifyApi = {
   commit: (id, message) => invoke('commit', id, message),
   openPath: (p) => invoke('open:path', p),
   openExternal: (u) => invoke('open:external', u),
+  artifactsUrl: () => invoke('artifacts:url'),
 
   tickets: {
     provider: () => invoke('tickets:provider'),

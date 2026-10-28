@@ -6,20 +6,26 @@ function start() {
   const state = {
     labels: { 'label-bot': 'bot-demo' },
     issues: [
-      { id: 'uuid-100', identifier: 'DEMO-100', title: 'Filtrar pedidos por estado', url: 'https://linear.app/demo/issue/DEMO-100', labels: [], comments: [], prUrls: [], state: 'Todo', type: 'unstarted' },
-      { id: 'uuid-101', identifier: 'DEMO-101', title: 'Exportar pedidos a CSV', url: 'https://linear.app/demo/issue/DEMO-101', labels: [], comments: [], prUrls: [], state: 'Todo', type: 'unstarted', priority: 2 },
+      { id: 'uuid-100', identifier: 'DEMO-100', title: 'Filtrar pedidos por estado', url: 'https://linear.app/demo/issue/DEMO-100', labels: [], comments: [], prUrls: [], state: 'Todo', type: 'unstarted', parent: 'DEMO-102' },
+      { id: 'uuid-101', identifier: 'DEMO-101', title: 'Exportar pedidos a CSV', url: 'https://linear.app/demo/issue/DEMO-101', labels: [], comments: [], prUrls: [], state: 'Todo', type: 'unstarted', priority: 2, parent: 'DEMO-102' },
+      { id: 'uuid-102', identifier: 'DEMO-102', title: 'Epic: pedidos para operación', url: 'https://linear.app/demo/issue/DEMO-102', labels: [], comments: [], prUrls: [], state: 'Backlog', type: 'backlog' },
+      { id: 'uuid-103', identifier: 'DEMO-103', title: 'Totales por cliente', url: 'https://linear.app/demo/issue/DEMO-103', labels: [], comments: [], prUrls: [], state: 'In Progress', type: 'started', parent: 'DEMO-102', assignee: 'Otra persona' },
       { id: 'uuid-99', identifier: 'DEMO-99', title: 'Paginar la lista de pedidos', url: 'https://linear.app/demo/issue/DEMO-99', labels: [], comments: [], prUrls: [], state: 'Done', type: 'completed' }
     ],
     states: [
-      { name: 'Backlog', type: 'backlog', position: 0, color: '#bec2c8' },
-      { name: 'Todo', type: 'unstarted', position: 1, color: '#e2e2e2' },
-      { name: 'In Progress', type: 'started', position: 2, color: '#f2c94c' },
-      { name: 'In Review', type: 'started', position: 3, color: '#0f9d58' },
-      { name: 'Done', type: 'completed', position: 4, color: '#5e6ad2' },
-      { name: 'Canceled', type: 'canceled', position: 5, color: '#95a2b3' }
+      { id: 'st-backlog', name: 'Backlog', type: 'backlog', position: 0, color: '#bec2c8' },
+      { id: 'st-todo', name: 'Todo', type: 'unstarted', position: 1, color: '#e2e2e2' },
+      { id: 'st-in-progress', name: 'In Progress', type: 'started', position: 2, color: '#f2c94c' },
+      { id: 'st-in-review', name: 'In Review', type: 'started', position: 3, color: '#0f9d58' },
+      { id: 'st-done', name: 'Done', type: 'completed', position: 4, color: '#5e6ad2' },
+      { id: 'st-canceled', name: 'Canceled', type: 'canceled', position: 5, color: '#95a2b3' }
     ],
-    fires: []
+    fires: [],
+    moves: []
   }
+  const mine = (i) => !i.assignee
+  const kids = (i) => state.issues.filter((k) => k.parent === i.identifier)
+  const link = (i) => ({ identifier: i.identifier, title: i.title, state: { name: i.state, type: i.type } })
   const issue = (key) => state.issues.find((i) => i.id === key || i.identifier === key)
   const say = (i, body) => i.comments.push({ body, createdAt: new Date(Date.now() + i.comments.length).toISOString() })
 
@@ -30,6 +36,10 @@ function start() {
       const json = (body) => {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify(body))
+      }
+      if (req.url === '/artifacts') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        return res.end('<!doctype html><title>Artifacts</title><body style="font-family:sans-serif;padding:24px"><h1>Tus artifacts</h1><ul><li>Plan de pedidos</li><li>Tablero de métricas</li></ul></body>')
       }
       const fire = /^\/routines\/([^/]+)\/fire$/.exec(req.url)
       if (fire) {
@@ -51,14 +61,27 @@ function start() {
       }
       const { query, variables = {} } = JSON.parse(raw || '{}')
       if (query.includes('viewer { name }')) return json({ data: { viewer: { name: 'Demo' } } })
-      const card = (i) => ({ identifier: i.identifier, title: i.title, description: '', url: i.url, priority: i.priority ?? 0, updatedAt: '2026-10-01T00:00:00Z', team: { key: 'DEMO' }, labels: { nodes: i.labels.map((name) => ({ name })) }, state: { name: i.state, type: i.type }, inverseRelations: { nodes: [] } })
+      const card = (i) => ({ identifier: i.identifier, title: i.title, description: '', url: i.url, priority: i.priority ?? 0, updatedAt: '2026-10-01T00:00:00Z', team: { key: 'DEMO' }, labels: { nodes: i.labels.map((name) => ({ name })) }, state: { name: i.state, type: i.type }, inverseRelations: { nodes: [] }, parent: i.parent ? { identifier: i.parent } : null })
+      if (query.includes('assignee { name }')) {
+        const i = issue(variables.id)
+        const parent = i.parent && issue(i.parent)
+        return json({ data: { issue: { ...card(i), description: `Detalle de ${i.identifier}.`, assignee: { name: i.assignee ?? 'Demo' }, parent: parent ? link(parent) : null, children: { nodes: kids(i).map(link) } } } })
+      }
+      if (query.includes('issueUpdate')) {
+        const i = issue(variables.id)
+        const to = state.states.find((st) => st.id === variables.stateId)
+        i.state = to.name
+        i.type = to.type
+        state.moves.push(`${i.identifier}→${to.name}`)
+        return json({ data: { issueUpdate: { success: true } } })
+      }
       if (query.includes('open: assignedIssues'))
         return json({
           data: {
             viewer: {
               teams: { nodes: [{ key: 'DEMO', states: { nodes: state.states } }] },
-              open: { nodes: state.issues.filter((i) => i.type !== 'completed').map(card) },
-              done: { nodes: state.issues.filter((i) => i.type === 'completed').map(card) }
+              open: { nodes: state.issues.filter((i) => mine(i) && i.type !== 'completed').map((i) => ({ ...card(i), children: { nodes: kids(i).map((k) => ({ state: { type: k.type } })) } })) },
+              done: { nodes: state.issues.filter((i) => mine(i) && i.type === 'completed').map(card) }
             }
           }
         })
@@ -67,7 +90,7 @@ function start() {
           data: {
             viewer: {
               assignedIssues: {
-                nodes: state.issues.filter((i) => i.type !== 'completed').map((i) => ({ identifier: i.identifier, title: i.title, description: '', url: i.url, state: { name: i.state, type: i.type }, inverseRelations: { nodes: [] } }))
+                nodes: state.issues.filter((i) => mine(i) && i.type !== 'completed').map((i) => ({ identifier: i.identifier, title: i.title, description: '', url: i.url, state: { name: i.state, type: i.type }, inverseRelations: { nodes: [] } }))
               }
             }
           }

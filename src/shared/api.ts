@@ -5,7 +5,7 @@ import type { TicketStatus } from '../main/core/ticketStatus'
 import type { ApiCatalog, ApiRequest, ApiResponse } from '../main/core/apiTesting'
 import type { BotConfig } from '../main/core/bots'
 import type { Desk } from '../main/core/office'
-import type { BoardColumn } from '../main/core/board'
+import type { BoardColumn, IssueDetail } from '../main/core/board'
 import type { DeletePlan, DeleteStep, Session } from '../main/core/sessions'
 
 export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser, TicketProviderId }
@@ -66,7 +66,7 @@ export type { TicketStatus } from '../main/core/ticketStatus'
 export type { ApiCatalog, ApiEndpoint, ApiRequest, ApiResponse } from '../main/core/apiTesting'
 export type { BotConfig } from '../main/core/bots'
 export type { Desk } from '../main/core/office'
-export type { BoardCard, BoardColumn } from '../main/core/board'
+export type { BoardCard, BoardColumn, IssueDetail, IssueLink } from '../main/core/board'
 export type RebaseStart = {
   repo: string
   trunk: string
@@ -161,6 +161,10 @@ export interface AgentifyApi {
   }
   /** Your Linear tickets by state, with the bot that works each one. */
   board(): Promise<BoardColumn[]>
+  /** Any ticket, yours or not, with its parent and sub-tickets. */
+  boardIssue(identifier: string): Promise<IssueDetail>
+  /** Moves a ticket to a workflow state (by id) of its team. */
+  boardMove(identifier: string, stateId: string): Promise<void>
   bots: {
     save(bots: BotConfig[], tokens: Record<string, string>): Promise<AppConfig>
     hasToken(id: string): Promise<boolean>
@@ -174,6 +178,8 @@ export interface AgentifyApi {
   commit(id: string, message: string): Promise<CommitResult[]>
   openPath(path: string): Promise<void>
   openExternal(url: string): Promise<void>
+  /** Where the Artifacts tab opens: claude.ai's list of your artifacts. */
+  artifactsUrl(): Promise<string>
 
   tickets: {
     provider(): Promise<TicketProviderId>

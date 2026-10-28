@@ -3,8 +3,15 @@ import { BrowserWindow, ipcMain, Notification } from 'electron'
 import { fireRoutine, readStore, writeStore, type BotConfig, type BotRun } from './core/bots'
 import { saveConfig, type AppConfig } from './core/config'
 import { prState } from './core/github'
-import { buildBoard } from './core/board'
-import { addIssueLabel, boardIssues, commentOnIssue, labelledIssues } from './core/linear'
+import { buildBoard, withBot } from './core/board'
+import {
+  addIssueLabel,
+  boardIssues,
+  commentOnIssue,
+  issueDetail,
+  labelledIssues,
+  setIssueState
+} from './core/linear'
 import { buildDesks, iterateText, planIterations, type Desk } from './core/office'
 import { runResolved } from './core/proc'
 import { getSecret, setSecret } from './secrets'
@@ -186,4 +193,10 @@ export function registerOffice(
     const { issues, teams } = await boardIssues(linearKey())
     return buildBoard(issues, teams, requireCfg().bots ?? [], desks)
   })
+  ipcMain.handle('board:issue', async (_e, identifier: string) =>
+    withBot(await issueDetail(linearKey(), identifier), requireCfg().bots ?? [], desks)
+  )
+  ipcMain.handle('board:move', (_e, identifier: string, stateId: string) =>
+    setIssueState(linearKey(), identifier, stateId)
+  )
 }

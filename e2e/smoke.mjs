@@ -107,6 +107,7 @@ const app = await electron.launch({
     AGENTIFY_USER_DATA: userData,
     PATH: `${fakeBin};${process.env.PATH}`,
     AGENTIFY_LINEAR_URL: `${cloudUrl}/graphql`,
+    AGENTIFY_ARTIFACTS_URL: `${cloudUrl}/artifacts`,
     AGENTIFY_ROUTINES_URL: `${cloudUrl}/routines`
   }
 })
@@ -389,6 +390,38 @@ try {
   await page.waitForFunction(() => document.querySelector('input[placeholder="ENG-123"]')?.value === 'DEMO-101', null, { timeout: 15000 })
   await step('13c-tablero-iniciar-sesion')
   await page.locator('.modal').getByRole('button', { name: 'Cancelar' }).click()
+
+  // Sub-tickets: the card names its parent, the epic counts its children, and the drawer travels
+  // between them, also to a child assigned to someone else.
+  await page.locator('.kcard[data-ticket="DEMO-102"] .kkids', { hasText: '0/3' }).waitFor()
+  await page.locator('.kcard[data-ticket="DEMO-101"] .kparent', { hasText: 'DEMO-102' }).click()
+  const drawer = page.locator('.kdrawer')
+  await drawer.getByText('Sub-tickets · 0/3 terminados').waitFor()
+  await drawer.locator('.klink[data-link="DEMO-103"]').waitFor()
+  await step('13d-tablero-epic')
+  await drawer.locator('.klink[data-link="DEMO-103"]').click()
+  await drawer.getByText('Asignado a Otra persona').waitFor()
+  await drawer.locator('.klink[data-link="DEMO-102"]').waitFor()
+  await step('13e-tablero-subticket-ajeno')
+  await drawer.getByRole('button', { name: '← volver' }).click()
+  await drawer.getByText('Sub-tickets · 0/3 terminados').waitFor()
+  await drawer.getByRole('button', { name: '← volver' }).click()
+  await drawer.locator('.klink[data-link="DEMO-102"]').waitFor()
+  await drawer.getByRole('button', { name: '✕' }).click()
+
+  // Drag a card to another column: the ticket changes state in Linear.
+  await page.locator('.kcard[data-ticket="DEMO-101"]').dragTo(col('In Review'))
+  await col('In Review').locator('.kcard[data-ticket="DEMO-101"]').waitFor()
+  await page.waitForFunction(() => !document.querySelector('.kcard.moving'), null, { timeout: 15000 })
+  if (!cloud.state.moves.includes('DEMO-101→In Review')) throw new Error(`Linear no recibió el cambio: ${cloud.state.moves}`)
+  await col('In Review').locator('.kcard.status-in-review[data-ticket="DEMO-101"]').waitFor({ timeout: 15000 })
+  await step('13f-tablero-arrastrar')
+
+  // Artifacts: claude.ai inside the app (a stand-in page here), kept loaded between tabs.
+  await page.getByRole('button', { name: 'Artifacts' }).click()
+  await page.locator('.artifacts-url', { hasText: '/artifacts' }).waitFor({ timeout: 15000 })
+  await page.waitForTimeout(500)
+  await step('14-artifacts')
 
   await page.getByRole('button', { name: 'Repos' }).click()
   await step('11-repos')
