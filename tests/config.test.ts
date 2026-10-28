@@ -100,3 +100,22 @@ describe('ticket provider', () => {
     expect(ticketProvider({ ...cfg, tickets: { provider: 'github' } }, true)).toBe('github')
   })
 })
+
+describe('bots', () => {
+  const base = { branchPrefix: 'me', repos: [{ name: 'svc', path: 'svc', trunk: 'main' }], agents: [agent], defaultAgent: 'claude' }
+  const bot = { id: 'my-bot', name: 'My Bot', avatar: '🤖', routineId: 'trig_1', label: 'my-bot', commentPrefix: 'My Bot ·', readyCheck: 'review · ready', autoIterate: true }
+
+  test('bots survive load and save', async () => {
+    const root = tempDir()
+    writeConfig(root, { ...base, bots: [bot] })
+    const { saveConfig } = await import('../src/main/core/config')
+    saveConfig(loadConfig(root))
+    expect(loadConfig(root).bots).toEqual([bot])
+  })
+
+  test('a bot without routine, label or prefix is a config problem', () => {
+    const root = tempDir()
+    writeConfig(root, { ...base, bots: [{ id: 'x', name: 'X' }] })
+    expect(() => loadConfig(root)).toThrow(/routineId/)
+  })
+})

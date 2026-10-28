@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import type { AppConfig } from '../src/main/core/config'
-import { githubRepos, githubReposFor, githubSlug, githubTicketId, listGithubIssues } from '../src/main/core/github'
+import { githubRepos, githubReposFor, githubSlug, githubTicketId, listGithubIssues, prState } from '../src/main/core/github'
 import { git, makeOriginAndClone, tempDir } from './helpers/git'
 
 function cfgWith(remotes: Record<string, string>, extra: string[] = []): AppConfig {
@@ -115,4 +115,47 @@ test('suggested repos: the Repos line first, else the repo the issue lives in', 
   expect(githubReposFor({ ...base, description: '**Repos:** web', repo: 'api' }, known)).toEqual(['web'])
   expect(githubReposFor({ ...base, description: '', repo: 'api' }, known)).toEqual(['api'])
   expect(githubReposFor({ ...base, description: '' }, known)).toEqual([])
+})
+
+test('prState reads CI, the ready check and its summary title', async () => {
+  const calls: string[][] = []
+  const gh = async (args: string[]): Promise<string> => {
+    calls.push(args)
+    if (args[0] === 'pr')
+      return JSON.stringify({
+        number: 7,
+        state: 'OPEN',
+        headRefOid: 'abc123',
+        statusCheckRollup: [
+          { __typename: 'CheckRun', name: 'tests', status: 'COMPLETED', conclusion: 'SUCCESS' },
+          { __typename: 'CheckRun', name: 'RadiIA · merge-ready', status: 'COMPLETED', conclusion: 'FAILURE' },
+          { __typename: 'StatusContext', context: 'vercel', state: 'SUCCESS' }
+        ]
+      })
+    return JSON.stringify({ check_runs: [{ name: 'RadiIA · merge-ready', output: { title: '2 hallazgos bloqueantes' } }] })
+  }
+  const s = await prState('https://github.com/o/r/pull/7', 'RadiIA · merge-ready', gh)
+  expect(s).toEqual({
+    url: 'https://github.com/o/r/pull/7',
+    number: 7,
+    ciFailed: false,
+    ready: 'failure',
+    readyTitle: '2 hallazgos bloqueantes',
+    merged: false
+  })
+  expect(calls[1]).toEqual(['api', 'repos/o/r/commits/abc123/check-runs'])
+})
+
+test('a failed CI check or status context counts as CI failed; no ready check is missing', async () => {
+  const gh = async (args: string[]): Promise<string> =>
+    args[0] === 'pr'
+      ? JSON.stringify({
+          number: 8,
+          state: 'MERGED',
+          headRefOid: 'def',
+          statusCheckRollup: [{ __typename: 'StatusContext', context: 'ci', state: 'ERROR' }]
+        })
+      : '{"check_runs":[]}'
+  const s = await prState('https://github.com/o/r/pull/8', 'RadiIA · merge-ready', gh)
+  expect(s).toMatchObject({ ciFailed: true, ready: 'missing', merged: true })
 })

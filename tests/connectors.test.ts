@@ -65,3 +65,16 @@ test('manual tickets need no connector', async () => {
   const checks = await checkConnectors({ ...cfg, extraChecks: [], tickets: { provider: 'manual' } }, quiet)
   expect(checks.map((c) => c.id).filter((id) => id === 'linear' || id === 'github-issues')).toEqual([])
 })
+
+test('each cloud bot is checked for its routine id and token, without firing it', async () => {
+  const bots = [
+    { id: 'ok-bot', name: 'Ok Bot', routineId: 'trig_1', label: 'ok', commentPrefix: 'Ok ·' },
+    { id: 'no-token', name: 'Sin Token', routineId: 'trig_2', label: 'n', commentPrefix: 'N ·' }
+  ]
+  const checks = await checkConnectors(
+    { ...cfg, extraChecks: [], tickets: { provider: 'manual' }, bots },
+    { ...quiet, secret: (name: string) => (name === 'bot:ok-bot' ? 'sk-ant-oat01-x' : null) }
+  )
+  expect(checks.find((c) => c.id === 'bot:ok-bot')).toMatchObject({ ok: true, label: 'Ok Bot' })
+  expect(checks.find((c) => c.id === 'bot:no-token')).toMatchObject({ ok: false })
+})

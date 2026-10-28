@@ -4,10 +4,11 @@ import type { AppConfig, SessionInfo } from '../../shared/api'
 import { api, errorText } from './api'
 import { Board } from './screens/Board'
 import { Connectors } from './screens/Connectors'
+import { Office } from './screens/Office'
 import { Repos } from './screens/Repos'
 import { SessionView } from './screens/SessionView'
 
-type Tab = 'sessions' | 'connectors' | 'repos'
+type Tab = 'sessions' | 'office' | 'connectors' | 'repos'
 
 function FirstRun({ onReady }: { onReady: (c: AppConfig) => void }): React.JSX.Element {
   const [error, setError] = useState('')
@@ -48,6 +49,21 @@ export default function App(): React.JSX.Element {
   const [openId, setOpenId] = useState<string | null>(null)
   const [failing, setFailing] = useState(0)
   const [activity, setActivity] = useState('')
+  // Bots that need an answer light the Office tab; a click on their notification opens it.
+  const [needsYou, setNeedsYou] = useState(0)
+  useEffect(() => {
+    const offChanged = api.office.onChanged((desks) =>
+      setNeedsYou(desks.filter((d) => d.status === 'needs-you').length)
+    )
+    const offFocus = api.office.onFocus(() => {
+      setOpenId(null)
+      setTab('office')
+    })
+    return () => {
+      offChanged()
+      offFocus()
+    }
+  }, [])
   const [build, setBuild] = useState<{
     version: string
     commit?: string
@@ -142,6 +158,13 @@ export default function App(): React.JSX.Element {
             Sesiones
           </button>
           <button
+            className={`tab ${tab === 'office' ? 'active' : ''}`}
+            onClick={() => setTab('office')}
+            title={needsYou ? `${needsYou} bot(s) te necesitan` : 'Bots trabajando en la nube'}
+          >
+            Oficina{needsYou > 0 && <span className="badge" />}
+          </button>
+          <button
             className={`tab ${tab === 'connectors' ? 'active' : ''}`}
             onClick={() => setTab('connectors')}
           >
@@ -211,6 +234,7 @@ export default function App(): React.JSX.Element {
       )}
       {tab === 'connectors' && <Connectors cfg={cfg} onChecked={setFailing} onConfig={setCfg} />}
       {tab === 'repos' && <Repos cfg={cfg} onSaved={setCfg} />}
+      {tab === 'office' && <Office cfg={cfg} onConfig={setCfg} />}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
+import type { BotConfig } from './bots'
 import { resolveCommand, run } from './proc'
 
 export const CONFIG_FILE = 'agentify.config.json'
@@ -79,6 +80,8 @@ export type AppConfig = {
   tickets?: TicketsConfig
   /** Prompt for the agent that creates a ticket; `{context}` is filled in. Default: one per provider. */
   ticketPrompt?: string
+  /** Cloud bots (Claude Code routines) shown in the Office. Their tokens live in the app's secrets. */
+  bots?: BotConfig[]
 }
 
 export class ConfigError extends Error {
@@ -142,6 +145,7 @@ export function parseConfig(raw: any, root: string): AppConfig {
     problems.push(`El agente por defecto "${raw?.defaultAgent}" no existe`)
   if (raw?.browserRepo && !repos.some((r) => r.name === raw.browserRepo))
     problems.push(`browserRepo "${raw.browserRepo}" no es un repo de la config`)
+  const bots = parseBots(raw?.bots, problems)
   if (problems.length) throw new ConfigError(problems)
   return {
     root,
@@ -156,8 +160,28 @@ export function parseConfig(raw: any, root: string): AppConfig {
       ? raw.testUsers.filter((u: any) => typeof u?.email === 'string' && typeof u?.password === 'string')
       : undefined,
     tickets: parseTickets(raw.tickets),
-    ticketPrompt: typeof raw.ticketPrompt === 'string' && raw.ticketPrompt.trim() ? raw.ticketPrompt : undefined
+    ticketPrompt: typeof raw.ticketPrompt === 'string' && raw.ticketPrompt.trim() ? raw.ticketPrompt : undefined,
+    bots
   }
+}
+
+function parseBots(raw: any, problems: string[]): BotConfig[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  return raw.map((b: any) => {
+    const label = b?.name || b?.id || '(bot sin nombre)'
+    for (const k of ['id', 'name', 'routineId', 'label', 'commentPrefix'])
+      if (typeof b?.[k] !== 'string' || !b[k]) problems.push(`bot ${label}: falta "${k}"`)
+    return {
+      id: b?.id,
+      name: b?.name,
+      avatar: typeof b?.avatar === 'string' ? b.avatar : undefined,
+      routineId: b?.routineId,
+      label: b?.label,
+      commentPrefix: b?.commentPrefix,
+      readyCheck: typeof b?.readyCheck === 'string' ? b.readyCheck : undefined,
+      autoIterate: b?.autoIterate === true
+    }
+  })
 }
 
 function parseTickets(raw: any): TicketsConfig | undefined {
@@ -193,6 +217,7 @@ export function saveConfig(cfg: AppConfig): void {
     testUsers: cfg.testUsers,
     tickets: cfg.tickets,
     ticketPrompt: cfg.ticketPrompt,
+    bots: cfg.bots,
     repos: cfg.repos.map((r) => ({
       ...r,
       path: r.path.startsWith(prefix) ? r.path.slice(prefix.length) : r.path

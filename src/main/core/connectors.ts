@@ -121,6 +121,24 @@ export async function checkConnectors(cfg: AppConfig, deps: ConnectorDeps): Prom
     }).check()
   )
 
+  // Cloud bots: only the shape is checked; the routine API has no call that does not start a run.
+  for (const bot of cfg.bots ?? []) {
+    const token = deps.secret(`bot:${bot.id}`)
+    const ok = bot.routineId.startsWith('trig_') && !!token
+    checks.push(
+      Promise.resolve({
+        id: `bot:${bot.id}`,
+        label: bot.name,
+        ok,
+        detail: !bot.routineId.startsWith('trig_')
+          ? 'El id de la routine debe empezar con trig_'
+          : token
+            ? `Routine ${bot.routineId} · token guardado`
+            : 'Falta el token de la routine: pégalo en Oficina → ⚙ Bots'
+      })
+    )
+  }
+
   ;(cfg.extraChecks ?? []).forEach((x, i) => {
     checks.push(
       (async (): Promise<Check> => {

@@ -37,6 +37,7 @@ import { readSessions, updateSession, type Session } from './core/store'
 import { providerFor, ticketPrompt } from './core/tickets'
 import { buildInfo, newerOnDisk, type BuildInfo } from './core/buildInfo'
 import { apiFillPrompt, catalogFile, curlFor, login, readCatalog, sendRequest, type ApiRequest } from './core/apiTesting'
+import { registerOffice } from './office'
 import { PtyManager } from './pty'
 import { getSecret, setSecret } from './secrets'
 import type { SessionInfo, DeleteProgress } from '../shared/api'
@@ -119,6 +120,7 @@ function broadcast(channel: string, ...args: unknown[]): void {
 }
 
 export function registerIpc(): void {
+  registerOffice(requireCfg, (c) => (cfg = c), broadcast)
   cfg = (() => {
     try {
       return loadRoot()

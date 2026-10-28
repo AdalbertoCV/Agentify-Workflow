@@ -1,6 +1,7 @@
 import type { AppConfig } from './config'
 import { parseReposLine, type Issue } from './linear'
 import { run } from './proc'
+import type { PrState } from './bots'
 import { githubStatus } from './ticketStatus'
 
 /** "owner/repo" of a GitHub remote URL (https or ssh); null for anything else. */
@@ -53,9 +54,17 @@ const ISSUES_QUERY = `query($owner: String!, $name: String!, $login: String!) {
   }
 }`
 
-const STATE_LABEL = { ready: 'Abierto', 'in-progress': 'En progreso', 'in-review': 'En revisión', blocked: 'Bloqueado' }
+const STATE_LABEL = {
+  ready: 'Abierto',
+  'in-progress': 'En progreso',
+  'in-review': 'En revisión',
+  blocked: 'Bloqueado'
+}
 
-export async function listGithubIssues(cfg: AppConfig, gh: (args: string[]) => Promise<string>): Promise<Issue[]> {
+export async function listGithubIssues(
+  cfg: AppConfig,
+  gh: (args: string[]) => Promise<string>
+): Promise<Issue[]> {
   const issues: Issue[] = []
   let firstError: unknown
   let answered = 0
@@ -78,12 +87,15 @@ export async function listGithubIssues(cfg: AppConfig, gh: (args: string[]) => P
         `query=${ISSUES_QUERY.replace(/\s+/g, ' ')}`
       ])
       answered++
-      const nodes = (JSON.parse(out) as { data: { repository: { issues: { nodes: GhIssue[] } } } }).data.repository.issues
-        .nodes
+      const nodes = (JSON.parse(out) as { data: { repository: { issues: { nodes: GhIssue[] } } } })
+        .data.repository.issues.nodes
       for (const i of nodes) {
         const info = githubStatus(
           i.labels.nodes.map((l) => l.name),
-          i.blockedBy.nodes.map((b) => ({ ref: `${b.repository.nameWithOwner}#${b.number}`, open: b.state === 'OPEN' }))
+          i.blockedBy.nodes.map((b) => ({
+            ref: `${b.repository.nameWithOwner}#${b.number}`,
+            open: b.state === 'OPEN'
+          }))
         )
         issues.push({
           identifier: githubTicketId(slug, i.number, repo),
@@ -107,4 +119,61 @@ export function githubReposFor(issue: Issue, known: string[]): string[] {
   const named = parseReposLine(issue.description, known)
   if (named.length) return named
   return issue.repo && known.includes(issue.repo) ? [issue.repo] : []
+}
+
+type RollupItem =
+  | { __typename: 'CheckRun'; name: string; status: string; conclusion: string | null }
+  | { __typename: 'StatusContext'; context: string; state: string }
+
+const FAILED = ['FAILURE', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR']
+
+/** Where a bot's PR stands: CI, the check that means "ready to merge" and that check's summary title. */
+export async function prState(
+  url: string,
+  readyCheck: string | undefined,
+  gh: (args: string[]) => Promise<string>
+): Promise<PrState> {
+  const pr = JSON.parse(
+    await gh(['pr', 'view', url, '--json', 'number,state,headRefOid,statusCheckRollup'])
+  ) as {
+    number: number
+    state: string
+    headRefOid: string
+    statusCheckRollup: RollupItem[]
+  }
+  const name = (c: RollupItem): string => (c.__typename === 'CheckRun' ? c.name : c.context)
+  const outcome = (c: RollupItem): string =>
+    c.__typename === 'CheckRun' ? (c.conclusion ?? c.status) : c.state
+  const checks = pr.statusCheckRollup ?? []
+  const ci = checks.filter((c) => name(c) !== readyCheck)
+  const ready = readyCheck ? checks.find((c) => name(c) === readyCheck) : undefined
+  const readyOutcome = ready ? outcome(ready).toUpperCase() : ''
+  let readyTitle: string | undefined
+  if (ready) {
+    const slug = /github\.com\/([^/]+\/[^/]+)\/pull/.exec(url)?.[1]
+    try {
+      const runs = JSON.parse(
+        await gh(['api', `repos/${slug}/commits/${pr.headRefOid}/check-runs`])
+      ) as {
+        check_runs: { name: string; output?: { title?: string | null } }[]
+      }
+      readyTitle = runs.check_runs.find((r) => r.name === readyCheck)?.output?.title ?? undefined
+    } catch {
+      readyTitle = undefined
+    }
+  }
+  return {
+    url,
+    number: pr.number,
+    ciFailed: ci.some((c) => FAILED.includes(outcome(c).toUpperCase())),
+    ready: !ready
+      ? 'missing'
+      : readyOutcome === 'SUCCESS'
+        ? 'success'
+        : FAILED.includes(readyOutcome)
+          ? 'failure'
+          : 'pending',
+    readyTitle,
+    merged: pr.state === 'MERGED'
+  }
 }

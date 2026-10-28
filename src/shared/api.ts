@@ -3,6 +3,8 @@ import type { Chunk } from '../main/core/conflicts'
 import type { RebaseState, Resolution } from '../main/core/rebase'
 import type { TicketStatus } from '../main/core/ticketStatus'
 import type { ApiCatalog, ApiRequest, ApiResponse } from '../main/core/apiTesting'
+import type { BotConfig } from '../main/core/bots'
+import type { Desk } from '../main/core/office'
 import type { DeletePlan, DeleteStep, Session } from '../main/core/sessions'
 
 export type { AppConfig, RepoConfig, DeletePlan, DeleteStep, Session, TestUser, TicketProviderId }
@@ -61,6 +63,8 @@ export type { Chunk, Choice } from '../main/core/conflicts'
 export type { ConflictFile, RebaseState, Resolution } from '../main/core/rebase'
 export type { TicketStatus } from '../main/core/ticketStatus'
 export type { ApiCatalog, ApiEndpoint, ApiRequest, ApiResponse } from '../main/core/apiTesting'
+export type { BotConfig } from '../main/core/bots'
+export type { Desk } from '../main/core/office'
 export type RebaseStart = { repo: string; trunk: string; status: string; replayed?: number; error?: string }
 
 export type OnboardStart = { repoName: string; repoPath: string; workDir: string; terminalId: string }
@@ -126,6 +130,22 @@ export interface AgentifyApi {
     login(id: string, repo: string, userIndex: number): Promise<{ name: string; value: string }>
     send(id: string, repo: string, req: ApiRequest): Promise<ApiResponse>
     curl(id: string, repo: string, req: ApiRequest): Promise<string>
+  }
+
+  office: {
+    desks(): Promise<Desk[]>
+    refresh(): Promise<Desk[]>
+    assign(botId: string, ticket: string): Promise<Desk[]>
+    answer(key: string, text: string): Promise<Desk[]>
+    iterate(key: string): Promise<Desk[]>
+    retry(key: string): Promise<Desk[]>
+    dismiss(key: string): Promise<Desk[]>
+    onChanged(cb: (desks: Desk[]) => void): () => void
+    onFocus(cb: (key: string) => void): () => void
+  }
+  bots: {
+    save(bots: BotConfig[], tokens: Record<string, string>): Promise<AppConfig>
+    hasToken(id: string): Promise<boolean>
   }
 
   capture(webContentsId: number, rect?: { x: number; y: number; width: number; height: number }): Promise<void>

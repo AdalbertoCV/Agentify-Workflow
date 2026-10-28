@@ -1187,3 +1187,152 @@ button.ok-btn {
 .api-down span {
   flex: 1;
 }
+.office {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 16px;
+}
+.office-counts {
+  display: flex;
+  gap: 12px;
+  margin-left: 10px;
+}
+.desk {
+  --st: var(--warn);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--st);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.desk.done {
+  --st: var(--ok);
+}
+.desk.needs-you {
+  --st: var(--bad);
+}
+.desk.idle {
+  --st: var(--muted);
+}
+.desk.focused {
+  box-shadow: 0 0 0 2px var(--st);
+}
+.desk-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bot-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  background: var(--panel-2);
+  box-shadow: 0 0 0 2px var(--st, var(--line));
+  object-fit: cover;
+  flex: none;
+}
+.desk-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.desk-status {
+  --st: var(--warn);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--st);
+}
+.desk-status.done {
+  --st: var(--ok);
+}
+.desk-status.needs-you {
+  --st: var(--bad);
+}
+.desk-status.idle {
+  --st: var(--muted);
+}
+.desk-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--st);
+}
+.desk.working .desk-status .dot {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.bubble {
+  position: relative;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  margin-left: 12px;
+}
+.bubble::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 12px;
+  width: 12px;
+  height: 12px;
+  background: var(--panel-2);
+  border-left: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  transform: rotate(45deg);
+}
+.bubble-ticket {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.bubble-text {
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.desk-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.desk-answer textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+.desk-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bots-modal .bot-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.bots-modal .row input {
+  flex: 1;
+}
+.bots-modal .bot-emoji {
+  flex: 0 0 56px !important;
+  text-align: center;
+  font-size: 18px;
+}
+.check-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 13px;
+}

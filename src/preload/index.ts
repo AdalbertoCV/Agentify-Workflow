@@ -62,6 +62,22 @@ const api: AgentifyApi = {
     curl: (id, repo, req) => invoke('api:curl', id, repo, req)
   },
 
+  office: {
+    desks: () => invoke('office:desks'),
+    refresh: () => invoke('office:refresh'),
+    assign: (botId, ticket) => invoke('office:assign', botId, ticket),
+    answer: (key, text) => invoke('office:answer', key, text),
+    iterate: (key) => invoke('office:iterate', key),
+    retry: (key) => invoke('office:retry', key),
+    dismiss: (key) => invoke('office:dismiss', key),
+    onChanged: (cb) => listen('office:changed', cb),
+    onFocus: (cb) => listen('office:focus', cb)
+  },
+  bots: {
+    save: (bots, tokens) => invoke('bots:save', bots, tokens),
+    hasToken: (id) => invoke('bots:has-token', id)
+  },
+
   capture: (wcId, rect) => invoke('capture', wcId, rect),
   diff: (id) => invoke('diff', id),
   commit: (id, message) => invoke('commit', id, message),

@@ -1,6 +1,7 @@
 // End-to-end smoke: drives the built app (npm run build first) against throwaway repos.
 // Usage: node e2e/smoke.mjs [screenshotDir]
 import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -85,16 +86,29 @@ writeFileSync(
 if (a[0] === 'auth') { console.error('Logged in to github.com account e2e\\n  - Active account: true'); process.exit(0) }
 if (a[0] === 'api' && a[1] === 'user') { console.log('e2e'); process.exit(0) }
 if (a[0] === 'api' && a[1] === 'graphql') { console.log(JSON.stringify({ data: { repository: { issues: { nodes: ${JSON.stringify(fakeIssues)} } } } })); process.exit(0) }
+// The bot's PR: CI green and the ready check passed.
+if (a[0] === 'pr' && a[1] === 'view') { console.log(JSON.stringify({ number: 5, state: 'OPEN', headRefOid: 'abc', statusCheckRollup: [{ __typename: 'CheckRun', name: 'tests', status: 'COMPLETED', conclusion: 'SUCCESS' }, { __typename: 'CheckRun', name: 'review · ready', status: 'COMPLETED', conclusion: 'SUCCESS' }] })); process.exit(0) }
+if (a[0] === 'api' && /check-runs$/.test(a[1])) { console.log(JSON.stringify({ check_runs: [{ name: 'review · ready', output: { title: 'Listo para merge' } }] })); process.exit(0) }
 console.error('gh falso: ' + a.join(' ')); process.exit(1)
 `
 )
 writeFileSync(join(fakeBin, 'gh.cmd'), `@node "%~dp0gh-fake.cjs" %*\r\n`)
 
+// A stand-in Linear and routines API: the Office's cloud bot, without spending real runs.
+const cloud = await createRequire(import.meta.url)('./fixtures/cloud-bots.cjs').start()
+const cloudUrl = `http://127.0.0.1:${cloud.port}`
+
 // AGENTIFY_EXE=dist/win-unpacked/agentify.exe runs the same flow against the packaged app.
 const app = await electron.launch({
   ...(process.env.AGENTIFY_EXE ? { executablePath: resolve(process.env.AGENTIFY_EXE), args: [] } : { args: ['.'] }),
   cwd: resolve('.'),
-  env: { ...process.env, AGENTIFY_USER_DATA: userData, PATH: `${fakeBin};${process.env.PATH}` }
+  env: {
+    ...process.env,
+    AGENTIFY_USER_DATA: userData,
+    PATH: `${fakeBin};${process.env.PATH}`,
+    AGENTIFY_LINEAR_URL: `${cloudUrl}/graphql`,
+    AGENTIFY_ROUTINES_URL: `${cloudUrl}/routines`
+  }
 })
 const page = await app.firstWindow()
 const step = async (name) => {
@@ -322,6 +336,38 @@ try {
   await step('10f-ticket-agente')
   await page.locator('.modal').getByRole('button', { name: 'Cerrar' }).click()
 
+  // The Office: a cloud bot (stand-in Linear + routines API) takes a ticket, asks, gets the answer, delivers.
+  await page.evaluate(async () => {
+    await window.agentify.secrets.set('linear', 'lin_api_e2e')
+    await window.agentify.tickets.setProvider('linear')
+  })
+  await page.getByRole('button', { name: 'Oficina' }).click()
+  await page.getByText('Aún no hay bots').waitFor({ timeout: 10000 })
+  await page.getByRole('button', { name: '⚙ Bots' }).click()
+  await page.getByPlaceholder('Nombre (Adal-Bot)').fill('Bot Demo')
+  await page.getByPlaceholder('Id de la routine (trig_…)').fill('trig_demo')
+  await page.getByPlaceholder('Etiqueta del ticket (adal-bot)').fill('bot-demo')
+  await page.getByPlaceholder('Prefijo de sus comentarios (Adal-Bot ·)').fill('Bot Demo ·')
+  await page.getByPlaceholder('Check de listo (opcional)').fill('review · ready')
+  await page.getByPlaceholder('Token de la routine (sk-ant-oat01-…)').fill('sk-ant-oat01-e2e')
+  await page.locator('.modal').getByRole('button', { name: 'Guardar' }).click()
+  await page.getByText('Nadie trabaja ahora').waitFor({ timeout: 15000 })
+  await page.getByRole('button', { name: '+ Asignar ticket' }).click()
+  await page.locator('.modal .issue', { hasText: 'DEMO-100' }).click()
+  await page.getByRole('button', { name: 'Asignar y arrancar' }).click()
+  await page.locator('.desk.needs-you', { hasText: 'DEMO-100' }).waitFor({ timeout: 30000 })
+  if (!(await page.locator('.desk .bubble-text').innerText()).includes('¿El filtro debe quedar en la URL'))
+    throw new Error('la nube no muestra la pregunta del bot')
+  if (!cloud.state.issues[0].labels.includes('bot-demo')) throw new Error('el ticket no recibió la etiqueta del bot')
+  await step('12-oficina-te-necesita')
+  await page.locator('.desk-answer textarea').fill('Sí, en la URL como ?status=pending para poder compartirlo.')
+  await page.locator('.desk-answer').getByRole('button', { name: 'Responder' }).click()
+  await page.locator('.desk.done', { hasText: 'DEMO-100' }).waitFor({ timeout: 30000 })
+  if (!cloud.state.fires.at(-1).includes('Respuesta del dueño a tu pregunta: Sí, en la URL'))
+    throw new Error(`el bot no recibió la respuesta: ${cloud.state.fires.at(-1)}`)
+  if (!cloud.state.issues[0].comments.some((c) => c.body.startsWith('Sí, en la URL'))) throw new Error('la respuesta no quedó en el ticket')
+  await step('12b-oficina-terminado')
+
   await page.getByRole('button', { name: 'Repos' }).click()
   await step('11-repos')
   console.log(`\nTodo bien. Capturas en ${shots}`)
@@ -331,4 +377,5 @@ try {
   process.exitCode = 1
 } finally {
   await app.close()
+  cloud.server.close()
 }
