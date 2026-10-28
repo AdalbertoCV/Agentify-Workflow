@@ -69,12 +69,14 @@ export function Artifacts({ hidden }: { hidden: boolean }): React.JSX.Element {
             ref={(el) => attach(el as WebviewEl | null)}
             src={home}
             partition="persist:claude"
+            // A string, not true: React drops boolean values of attributes it does not know.
+            {...{ allowpopups: 'true' as unknown as boolean }}
             useragent={USER_AGENT}
           />
         )}
       </div>
       <div className="muted">
-        Si el acceso con Google no abre aquí, entra con tu correo: claude.ai te manda un código.
+        Entra una sola vez con Google o Apple: se abre una ventanita y la sesión queda guardada en la app.
       </div>
     </div>
   )
