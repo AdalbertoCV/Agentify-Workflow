@@ -1,6 +1,6 @@
 {
   "name": "agentify-workflow",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "One ticket, one isolated session: worktrees, database, ports, agent and browser in one click",
   "main": "./out/main/index.js",
   "author": "AdalbertoCV",

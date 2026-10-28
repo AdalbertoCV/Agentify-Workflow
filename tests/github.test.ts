@@ -128,13 +128,13 @@ test('prState reads CI, the ready check and its summary title', async () => {
         headRefOid: 'abc123',
         statusCheckRollup: [
           { __typename: 'CheckRun', name: 'tests', status: 'COMPLETED', conclusion: 'SUCCESS' },
-          { __typename: 'CheckRun', name: 'RadiIA · merge-ready', status: 'COMPLETED', conclusion: 'FAILURE' },
+          { __typename: 'CheckRun', name: 'review · ready', status: 'COMPLETED', conclusion: 'FAILURE' },
           { __typename: 'StatusContext', context: 'vercel', state: 'SUCCESS' }
         ]
       })
-    return JSON.stringify({ check_runs: [{ name: 'RadiIA · merge-ready', output: { title: '2 hallazgos bloqueantes' } }] })
+    return JSON.stringify({ check_runs: [{ name: 'review · ready', output: { title: '2 hallazgos bloqueantes' } }] })
   }
-  const s = await prState('https://github.com/o/r/pull/7', 'RadiIA · merge-ready', gh)
+  const s = await prState('https://github.com/o/r/pull/7', 'review · ready', gh)
   expect(s).toEqual({
     url: 'https://github.com/o/r/pull/7',
     number: 7,
@@ -156,6 +156,6 @@ test('a failed CI check or status context counts as CI failed; no ready check is
           statusCheckRollup: [{ __typename: 'StatusContext', context: 'ci', state: 'ERROR' }]
         })
       : '{"check_runs":[]}'
-  const s = await prState('https://github.com/o/r/pull/8', 'RadiIA · merge-ready', gh)
+  const s = await prState('https://github.com/o/r/pull/8', 'review · ready', gh)
   expect(s).toMatchObject({ ciFailed: true, ready: 'missing', merged: true })
 })

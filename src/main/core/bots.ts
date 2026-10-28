@@ -13,7 +13,7 @@ export type BotConfig = {
   routineId: string
   /** Ticket label that means "this bot works it". */
   label: string
-  /** Text its comments start with, e.g. "Adal-Bot ·". */
+  /** Text its comments start with, e.g. "Nova-Bot ·". */
   commentPrefix: string
   /** PR check that means "ready to merge". */
   readyCheck?: string

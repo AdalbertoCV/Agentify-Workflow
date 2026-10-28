@@ -9,15 +9,15 @@ import {
   type BotRun
 } from '../src/main/core/bots'
 
-const prefix = 'Adal-Bot ·'
+const prefix = 'Nova-Bot ·'
 const at = (min: number): string => new Date(Date.UTC(2026, 9, 27, 12, min)).toISOString()
 const now = Date.UTC(2026, 9, 27, 12, 30)
 
 test('bot comments are told apart from people by the prefix, with their kind', () => {
-  expect(commentKind('Adal-Bot · pregunta: ¿qué moneda?', prefix)).toBe('pregunta')
-  expect(commentKind('Adal-Bot · rechazo\nFalta el diseño', prefix)).toBe('rechazo')
-  expect(commentKind('Adal-Bot · entrega — PR listo', prefix)).toBe('entrega')
-  expect(commentKind('Adal-Bot · algo nuevo', prefix)).toBe('otro')
+  expect(commentKind('Nova-Bot · pregunta: ¿qué moneda?', prefix)).toBe('pregunta')
+  expect(commentKind('Nova-Bot · rechazo\nFalta el diseño', prefix)).toBe('rechazo')
+  expect(commentKind('Nova-Bot · entrega — PR listo', prefix)).toBe('entrega')
+  expect(commentKind('Nova-Bot · algo nuevo', prefix)).toBe('otro')
   expect(commentKind('Usa pesos mexicanos', prefix)).toBeNull()
 })
 
@@ -25,8 +25,8 @@ test('red when the last bot comment asks and nobody answered after it', () => {
   const s = deskStatus({
     prefix,
     comments: [
-      { body: 'Adal-Bot · veredicto: lo tomo', createdAt: at(1) },
-      { body: 'Adal-Bot · pregunta: ¿el filtro va en la URL?', createdAt: at(10) }
+      { body: 'Nova-Bot · veredicto: lo tomo', createdAt: at(1) },
+      { body: 'Nova-Bot · pregunta: ¿el filtro va en la URL?', createdAt: at(10) }
     ],
     now
   })
@@ -40,7 +40,7 @@ test('a person answering turns red back to working', () => {
   const s = deskStatus({
     prefix,
     comments: [
-      { body: 'Adal-Bot · pregunta: ¿el filtro va en la URL?', createdAt: at(10) },
+      { body: 'Nova-Bot · pregunta: ¿el filtro va en la URL?', createdAt: at(10) },
       { body: 'Sí, como ?status=', createdAt: at(12) }
     ],
     lastFiredAt: at(12),
@@ -52,7 +52,7 @@ test('a person answering turns red back to working', () => {
 test('green when the PR ready check passed; the bubble names the PR', () => {
   const s = deskStatus({
     prefix,
-    comments: [{ body: 'Adal-Bot · entrega: https://github.com/o/r/pull/7', createdAt: at(20) }],
+    comments: [{ body: 'Nova-Bot · entrega: https://github.com/o/r/pull/7', createdAt: at(20) }],
     pr: { url: 'https://github.com/o/r/pull/7', number: 7, ciFailed: false, ready: 'success', readyTitle: 'Listo para merge' },
     now
   })
@@ -70,7 +70,7 @@ test('a run is active until the bot comments after it, or for 90 minutes', () =>
     { id: 'r1', botId: 'b', ticket: 'T-1', kind: 'start', firedAt: at(0), sessionId: 's', sessionUrl: 'u', text: '' }
   ]
   expect(activeRun(runs, 'T-1', [], now)).toBeTruthy()
-  expect(activeRun(runs, 'T-1', [{ body: 'Adal-Bot · entrega', createdAt: at(5) }], now, prefix)).toBeNull()
+  expect(activeRun(runs, 'T-1', [{ body: 'Nova-Bot · entrega', createdAt: at(5) }], now, prefix)).toBeNull()
   expect(activeRun(runs, 'T-1', [], now + 91 * 60_000)).toBeNull()
   expect(activeRun(runs, 'T-2', [], now)).toBeNull()
 })

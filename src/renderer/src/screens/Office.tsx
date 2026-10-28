@@ -102,7 +102,7 @@ function BotsDialog({
                 title="Avatar: emoji o URL de imagen"
               />
               <input
-                placeholder="Nombre (Adal-Bot)"
+                placeholder="Nombre (Nova-Bot)"
                 value={b.name}
                 onChange={(e) => set(i, { name: e.target.value })}
               />
@@ -114,12 +114,12 @@ function BotsDialog({
             </div>
             <div className="row">
               <input
-                placeholder="Etiqueta del ticket (adal-bot)"
+                placeholder="Etiqueta del ticket (nova-bot)"
                 value={b.label}
                 onChange={(e) => set(i, { label: e.target.value })}
               />
               <input
-                placeholder="Prefijo de sus comentarios (Adal-Bot ·)"
+                placeholder="Prefijo de sus comentarios (Nova-Bot ·)"
                 value={b.commentPrefix}
                 onChange={(e) => set(i, { commentPrefix: e.target.value })}
               />
