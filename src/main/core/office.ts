@@ -45,8 +45,13 @@ export async function buildDesks(
   }
 ): Promise<Desk[]> {
   const desks: Desk[] = []
+  const byLabel = new Map<string, LabelledIssue[]>()
+  for (const label of new Set(bots.map((b) => b.label)))
+    byLabel.set(label, await deps.issues(label))
   for (const bot of bots) {
-    for (const issue of await deps.issues(bot.label)) {
+    const twins = bots.filter((b) => b.label === bot.label)
+    for (const issue of byLabel.get(bot.label) ?? []) {
+      if (owner(twins, issue, deps.store) !== bot) continue
       const key = `${bot.id}:${issue.identifier}`
       const dismissed = deps.store.dismissed.find((d) => d.key === key)
       const botSpokeSince =
@@ -108,6 +113,28 @@ export async function buildDesks(
     }
   }
   return desks
+}
+
+/**
+ * Bots can share a label (one label the reviewers know as "a bot's PR"): a ticket belongs to the
+ * one that last fired a run on it or commented on it, and to the first of them before that.
+ */
+function owner(twins: BotConfig[], issue: LabelledIssue, store: BotsStore): BotConfig {
+  let best = twins[0]
+  let latest = ''
+  for (const bot of twins) {
+    const times = [
+      ...store.runs
+        .filter((r) => r.botId === bot.id && r.ticket === issue.identifier)
+        .map((r) => r.firedAt),
+      ...issue.comments
+        .filter((c) => commentKind(c.body, bot.commentPrefix))
+        .map((c) => c.createdAt)
+    ]
+    const last = times.sort().at(-1) ?? ''
+    if (last > latest) [best, latest] = [bot, last]
+  }
+  return best
 }
 
 /** The iterations the app should fire now: red PRs of auto-iterating bots with no run at work. */
