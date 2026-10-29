@@ -253,6 +253,7 @@ export default function App(): React.JSX.Element {
             setOpenId(id)
           }}
           onConnect={() => setTab('connectors')}
+          onLinear={onLinear}
         />
       )}
       {tab === 'board' && onLinear && (
