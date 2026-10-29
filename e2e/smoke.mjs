@@ -389,6 +389,14 @@ try {
   await page.waitForFunction(() => document.querySelector('input[placeholder="ENG-123"]')?.value === 'DEMO-101', null, { timeout: 15000 })
   await step('13c-tablero-iniciar-sesion')
   await page.locator('.modal').getByRole('button', { name: 'Cancelar' }).click()
+  // With Linear, + Nuevo ticket is on the board, where the new card shows up, and not on Sesiones.
+  await page.locator('.page-head').getByRole('button', { name: '+ Nuevo ticket' }).click()
+  await page.getByText('lo crea en Linear').waitFor()
+  await page.locator('.modal').getByRole('button', { name: 'Cancelar' }).click()
+  await page.getByRole('button', { name: 'Sesiones' }).click()
+  if (await page.getByRole('button', { name: '+ Nuevo ticket' }).count())
+    throw new Error('con Linear, Sesiones sigue mostrando + Nuevo ticket')
+  await page.getByRole('button', { name: 'Tablero' }).click()
 
   // Sub-tickets: the card names its parent, the epic counts its children, and the drawer travels
   // between them, also to a child assigned to someone else.

@@ -11,13 +11,16 @@ export function Board({
   sessions,
   refresh,
   onOpen,
-  onConnect
+  onConnect,
+  onLinear
 }: {
   cfg: AppConfig
   sessions: SessionInfo[]
   refresh: () => void
   onOpen: (id: string) => void
   onConnect: () => void
+  /** With Linear, + Nuevo ticket lives on the board, where the new ticket shows up. */
+  onLinear: boolean
 }): React.JSX.Element {
   const [creating, setCreating] = useState(false)
   const [ticketing, setTicketing] = useState(false)
@@ -48,7 +51,7 @@ export function Board({
         <h1>Sesiones</h1>
         <span className="muted">{sessions.length}</span>
         <span className="spacer" />
-        <button onClick={() => setTicketing(true)}>+ Nuevo ticket</button>
+        {!onLinear && <button onClick={() => setTicketing(true)}>+ Nuevo ticket</button>}
         <button className="primary" onClick={() => setCreating(true)}>
           + Nueva sesión
         </button>

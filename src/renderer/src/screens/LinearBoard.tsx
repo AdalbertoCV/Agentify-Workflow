@@ -9,10 +9,13 @@ import type {
 } from '../../../shared/api'
 import { api, errorText, useInterval } from '../api'
 import { NewSessionDialog } from './NewSessionDialog'
+import { NewTicketDialog } from './NewTicketDialog'
 import { Avatar } from './Office'
 
 // Linear has no push for a desktop app: read again every 30 s and whenever the window comes back.
 const POLL_MS = 30_000
+// While an agent writes a ticket: often enough that its card is there when the dialog closes.
+const TICKETING_POLL_MS = 3_000
 
 const PRIORITY: Record<number, { icon: string; label: string }> = {
   1: { icon: '‼', label: 'Urgente' },
@@ -331,6 +334,7 @@ export function LinearBoard({
   const [dragging, setDragging] = useState<BoardCard | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const [moving, setMoving] = useState<string | null>(null)
+  const [ticketing, setTicketing] = useState(false)
 
   const load = useCallback(
     (): Promise<void> =>
@@ -355,7 +359,7 @@ export function LinearBoard({
       off()
     }
   }, [load])
-  useInterval(() => void load(), POLL_MS)
+  useInterval(() => void load(), ticketing ? TICKETING_POLL_MS : POLL_MS)
   useInterval(() => setNow(Date.now()), 1000)
 
   const cards = (columns ?? []).flatMap((c) => c.cards)
@@ -400,6 +404,7 @@ export function LinearBoard({
         <button className="ghost" onClick={() => void load()} title="Leer Linear ahora">
           ⟳
         </button>
+        <button onClick={() => setTicketing(true)}>+ Nuevo ticket</button>
       </div>
       {error && (
         <div className="row">
@@ -499,6 +504,18 @@ export function LinearBoard({
           onCreated={(s) => {
             setStarting(null)
             onOpenSession(s.id)
+          }}
+        />
+      )}
+      {ticketing && (
+        <NewTicketDialog
+          onClose={() => {
+            setTicketing(false)
+            void load()
+          }}
+          onConnect={() => {
+            setTicketing(false)
+            onConnect()
           }}
         />
       )}
