@@ -52,24 +52,22 @@ export async function buildDesks(
     const twins = bots.filter((b) => b.label === bot.label)
     for (const issue of byLabel.get(bot.label) ?? []) {
       if (owner(twins, issue, deps.store) !== bot) continue
-      const key = `${bot.id}:${issue.identifier}`
-      const dismissed = deps.store.dismissed.find((d) => d.key === key)
-      const botSpokeSince =
-        dismissed &&
-        issue.comments.some(
-          (c) => c.createdAt > dismissed.at && commentKind(c.body, bot.commentPrefix)
-        )
-      if (dismissed && !botSpokeSince) continue
-      const prUrl =
-        issue.prUrls[0] ??
-        issue.comments
-          .filter((c) => commentKind(c.body, bot.commentPrefix))
-          .map((c) => PR_LINK.exec(c.body)?.[0])
-          .find(Boolean)
-      const pr = prUrl ? await deps.pr(prUrl, bot.readyCheck).catch(() => undefined) : undefined
       const runs = deps.store.runs.filter(
         (r) => r.botId === bot.id && r.ticket === issue.identifier
       )
+      const botComments = issue.comments.filter((c) => commentKind(c.body, bot.commentPrefix))
+      // The label alone is not work: a desk opens once the bot was fired on the ticket or spoke on it.
+      if (!runs.length && !botComments.length) continue
+      const key = `${bot.id}:${issue.identifier}`
+      const dismissed = deps.store.dismissed.find((d) => d.key === key)
+      const backSince =
+        dismissed &&
+        (botComments.some((c) => c.createdAt > dismissed.at) ||
+          runs.some((r) => r.firedAt > dismissed.at))
+      if (dismissed && !backSince) continue
+      const prUrl =
+        issue.prUrls[0] ?? botComments.map((c) => PR_LINK.exec(c.body)?.[0]).find(Boolean)
+      const pr = prUrl ? await deps.pr(prUrl, bot.readyCheck).catch(() => undefined) : undefined
       const last = runs.sort((a, b) => a.firedAt.localeCompare(b.firedAt)).at(-1)
       let status = deskStatus({
         prefix: bot.commentPrefix,
