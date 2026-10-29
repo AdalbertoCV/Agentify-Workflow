@@ -31,7 +31,7 @@ export type BotRun = {
   text: string
 }
 
-/** Desks the user put away, and when: one comes back if its bot speaks again after that. */
+/** Desks the user put away, and when: one comes back if its bot is fired or speaks again after that. */
 export type BotsStore = { runs: BotRun[]; dismissed: { key: string; at: string }[] }
 export type Comment = { body: string; createdAt: string }
 export type CheckState = 'success' | 'failure' | 'pending' | 'missing'

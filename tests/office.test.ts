@@ -26,8 +26,18 @@ const issue = (identifier: string, extra: Partial<LabelledIssue> = {}): Labelled
   ...extra
 })
 const empty: BotsStore = { runs: [], dismissed: [] }
+const run = (ticket: string, min: number, botId = 'b'): BotsStore['runs'][number] => ({
+  id: `${botId}-${ticket}-${min}`,
+  botId,
+  ticket,
+  kind: 'start',
+  firedAt: at(min),
+  sessionId: 's',
+  sessionUrl: 'u',
+  text: ''
+})
 
-test('one desk per labelled issue, with status, bubble and the latest session link', async () => {
+test('one desk per ticket the bot was fired on, with status, bubble and the latest session link', async () => {
   const store: BotsStore = {
     runs: [
       {
@@ -52,9 +62,9 @@ test('one desk per labelled issue, with status, bubble and the latest session li
     store,
     now
   })
+  // T-2 only carries the label: nobody fired the bot on it, so it is not at work.
   expect(desks.map((d) => [d.key, d.status, d.sessionUrl])).toEqual([
-    ['b:T-1', 'needs-you', 'https://claude.ai/code/s1'],
-    ['b:T-2', 'working', undefined]
+    ['b:T-1', 'needs-you', 'https://claude.ai/code/s1']
   ])
   expect(desks[0].question).toContain('¿pesos o dólares?')
   expect(desks[0].avatar).toBe('🤖')
@@ -73,7 +83,7 @@ test('the PR comes from the issue attachments, or else from a link in the bot co
       seen.push(url)
       return undefined
     },
-    store: empty,
+    store: { runs: [run('T-1', 1)], dismissed: [] },
     now
   })
   expect(seen).toEqual(['https://github.com/o/r/pull/1', 'https://github.com/o/r/pull/2'])
@@ -101,6 +111,25 @@ test('a dismissed desk stays away until its bot speaks again', async () => {
   expect(spoke.map((d) => d.key)).toEqual(['b:T-1'])
 })
 
+test('a dismissed desk comes back when the bot is fired on it again', async () => {
+  const issues = async (): Promise<LabelledIssue[]> => [issue('T-1')]
+  const dismissed = [{ key: 'b:T-1', at: at(10) }]
+  const before = await buildDesks([bot], {
+    issues,
+    pr: async () => undefined,
+    store: { runs: [run('T-1', 5)], dismissed },
+    now
+  })
+  expect(before).toEqual([])
+  const fired = await buildDesks([bot], {
+    issues,
+    pr: async () => undefined,
+    store: { runs: [run('T-1', 5), run('T-1', 20)], dismissed },
+    now
+  })
+  expect(fired.map((d) => [d.key, d.status, d.active])).toEqual([['b:T-1', 'working', true]])
+})
+
 test('iterations are planned only for bots that auto-iterate, one per ticket, with the reason', async () => {
   const red: PrState = {
     url: 'https://github.com/o/r/pull/1',
@@ -114,7 +143,7 @@ test('iterations are planned only for bots that auto-iterate, one per ticket, wi
     {
       issues: async (label) => [issue(label === 'bot' ? 'T-1' : 'T-9', { prUrls: [red.url] })],
       pr: async () => red,
-      store: empty,
+      store: { runs: [run('T-1', -200), run('T-9', -200, 'quiet')], dismissed: [] },
       now
     }
   )
@@ -211,6 +240,6 @@ test('bots sharing a label split its tickets: each one sits at the desk of the b
     store,
     now
   })
-  expect(desks.map((d) => d.key).sort()).toEqual(['b:T-3', 'b:T-4', 'c:T-1', 'c:T-2'])
+  expect(desks.map((d) => d.key).sort()).toEqual(['b:T-3', 'c:T-1', 'c:T-2'])
   expect(asked).toEqual(['bot'])
 })
